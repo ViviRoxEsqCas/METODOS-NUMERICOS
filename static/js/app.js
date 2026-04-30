@@ -166,6 +166,9 @@ function mostrarSistemaEcuaciones(data) {
     document.getElementById("vector-b").innerHTML = htmlB;
 
     document.getElementById("sistema-section").style.display = "block";
+    
+    // Actualizar visualización 3D/2D
+    actualizarVisualizacion(matrizA, []);
 }
 
 // =========================
@@ -200,6 +203,11 @@ function mostrarDiagnostico(analisis) {
             </div>
         </section>
     `;
+    
+    // Actualizar análisis en visualización
+    if (typeof actualizarVisualizacion === 'function') {
+        actualizarVisualizacion(null, null, analisis);
+    }
 }
 
 // =========================
@@ -234,6 +242,9 @@ function mostrarSolucion(data) {
 
     container.innerHTML = html;
     document.getElementById("results-section").style.display = "block";
+    
+    // Actualizar visualización con la solución
+    actualizarVisualizacion(null, valores);
 }
 
 // =========================
@@ -326,3 +337,5 @@ function mostrarDetallesTecnicos(data) {
 
     container.innerHTML = html;
 }
+
+

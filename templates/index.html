@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Sistema Clínico Inteligente</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
@@ -62,40 +63,119 @@
         </div>
     </section>
 
-    <!-- VISUALIZACIÓN DEL SISTEMA DE ECUACIONES -->
-    <section class="panel sistema-panel" id="sistema-section" style="display: none;">
-        <h2>🔍 Sistema de Ecuaciones Generado (Ax = b)</h2>
-        <p style="font-size: 0.9em; color: #666;">El sistema automáticamente generado basado en los parámetros del paciente:</p>
+    <!-- VISUALIZACIÓN DEL SISTEMA DE ECUACIONES + 3D/2D -->
+    <div class="equations-visualization-wrapper">
         
-        <div class="ecuaciones-container">
-            <div class="matriz-container">
-                <h3>Matriz A (5×5) - Coeficientes</h3>
-                <div id="matriz-a" class="matriz"></div>
+        <section class="panel sistema-panel" id="sistema-section" style="display: none;">
+            <div class="sistema-header">
+                <h2>🔍 Sistema de Ecuaciones Generado (Ax = b)</h2>
+                <button onclick="toggleVisualizacion3D()" class="btn-visualize" title="Ver visualización 3D">
+                    <span class="icon-3d">📊</span>
+                    <span>Visualización 3D</span>
+                </button>
+            </div>
+            
+            <p style="font-size: 0.9em; color: #666;">El sistema automáticamente generado basado en los parámetros del paciente:</p>
+            
+            <div class="ecuaciones-container">
+                <div class="matriz-container">
+                    <h3>Matriz A (5×5) - Coeficientes</h3>
+                    <div id="matriz-a" class="matriz"></div>
+                </div>
+
+                <div class="operador">×</div>
+
+                <div class="vector-container">
+                    <h3>Vector x (5×1) - Incógnitas</h3>
+                    <div id="vector-x" class="vector"></div>
+                </div>
+
+                <div class="operador">=</div>
+
+                <div class="vector-container">
+                    <h3>Vector b (5×1) - Objetivos</h3>
+                    <div id="vector-b" class="vector"></div>
+                </div>
             </div>
 
-            <div class="operador">×</div>
-
-            <div class="vector-container">
-                <h3>Vector x (5×1) - Incógnitas</h3>
-                <div id="vector-x" class="vector"></div>
+            <div style="margin-top: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+                <p style="margin: 0; font-size: 0.9em; color: #555;">
+                    <strong>Nota:</strong> La matriz A es <span id="prop-diagonal" style="color: #27ae60;">diagonal dominante</span>, 
+                    lo que garantiza convergencia de métodos iterativos. 
+                    El vector b se ajusta automáticamente según los parámetros del paciente.
+                </p>
             </div>
+        </section>
 
-            <div class="operador">=</div>
+        <!-- PANEL VISUALIZACIÓN 3D/2D DESPLEGABLE -->
+        <div id="viz-modal" class="visualization-modal" style="display: none;">
+            <div class="visualization-container">
+                <div class="viz-header">
+                    <h2>Visualización de Espacios - Sistema de Ecuaciones</h2>
+                    <button onclick="closeVisualizacion3D()" class="btn-close">✕</button>
+                </div>
+                
+                <div class="viz-controls">
+                    <div class="viz-control-group">
+                        <label class="viz-control-label">Eje X</label>
+                        <select id="viz-axis-x" class="viz-control-select" onchange="actualizarEjes()">
+                            <option value="0">x₁ - Dosis Fármaco A</option>
+                            <option value="1">x₂ - Dosis Fármaco B</option>
+                            <option value="2">x₃ - Dosis Fármaco C</option>
+                            <option value="3">x₄ - Terapia Digital</option>
+                            <option value="4">x₅ - Intervención IA</option>
+                        </select>
+                    </div>
+                    <div class="viz-control-group">
+                        <label class="viz-control-label">Eje Y</label>
+                        <select id="viz-axis-y" class="viz-control-select" onchange="actualizarEjes()">
+                            <option value="0">x₁ - Dosis Fármaco A</option>
+                            <option value="1" selected>x₂ - Dosis Fármaco B</option>
+                            <option value="2">x₃ - Dosis Fármaco C</option>
+                            <option value="3">x₄ - Terapia Digital</option>
+                            <option value="4">x₅ - Intervención IA</option>
+                        </select>
+                    </div>
+                    <div class="viz-control-group">
+                        <label class="viz-control-label">Eje Z (3D)</label>
+                        <select id="viz-axis-z" class="viz-control-select" onchange="actualizarEjes()">
+                            <option value="0">x₁ - Dosis Fármaco A</option>
+                            <option value="1">x₂ - Dosis Fármaco B</option>
+                            <option value="2" selected>x₃ - Dosis Fármaco C</option>
+                            <option value="3">x₄ - Terapia Digital</option>
+                            <option value="4">x₅ - Intervención IA</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="viz-tabs">
+                    <button onclick="switchVizTab('3d')" class="viz-tab-btn active" data-tab="3d">📐 Espacio 3D</button>
+                    <button onclick="switchVizTab('2d')" class="viz-tab-btn" data-tab="2d">📊 Proyección 2D</button>
+                </div>
 
-            <div class="vector-container">
-                <h3>Vector b (5×1) - Objetivos</h3>
-                <div id="vector-b" class="vector"></div>
+                <div class="viz-content">
+                    <div id="viz-3d" class="viz-tab-content active">
+                        <div id="warning-3d" style="display:none;"></div>
+                        <div class="canvas-info">
+                            <p>Ecuaciones en el espacio 3D</p>
+                            <small>Usa el ratón para rotar • Scroll para zoom</small>
+                        </div>
+                        <canvas id="canvas-3d" class="visualization-canvas"></canvas>
+                        <div class="legend-3d" id="legend-3d"></div>
+                    </div>
+                    
+                    <div id="viz-2d" class="viz-tab-content">
+                        <div id="warning-2d" style="display:none;"></div>
+                        <div class="canvas-info">
+                            <p id="canvas-2d-title">Proyección 2D: Análisis Bivariado</p>
+                        </div>
+                        <canvas id="canvas-2d" class="visualization-canvas"></canvas>
+                        <div class="legend-2d" id="legend-2d"></div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <div style="margin-top: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-            <p style="margin: 0; font-size: 0.9em; color: #555;">
-                <strong>Nota:</strong> La matriz A es <span id="prop-diagonal" style="color: #27ae60;">diagonal dominante</span>, 
-                lo que garantiza convergencia de métodos iterativos. 
-                El vector b se ajusta automáticamente según los parámetros del paciente.
-            </p>
-        </div>
-    </section>
+    </div>
 
     <!-- DIAGNÓSTICO DEL SISTEMA -->
     <div id="diagnosis-container"></div>
@@ -131,5 +211,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/visualization-enhanced.js') }}"></script>
 </body>
 </html>
