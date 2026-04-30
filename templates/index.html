@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema Clínico Inteligente</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+<div class="container">
+
+    <header>
+        <h1>Sistema Inteligente de Optimización Terapéutica Personalizada</h1>
+        <p>Resolución automática mediante métodos numéricos con visualización del sistema de ecuaciones</p>
+    </header>
+    <div class="sidebar">
+        <button onclick="cambiarEscenario(event, 'ideal')" class="active">Ideal</button>
+        <button onclick="cambiarEscenario(event, 'estres')">Estrés</button>
+        <button onclick="cambiarEscenario(event, 'mal_condicionado')">Mal Condicionado</button>
+    </div>
+    <!-- FORMULARIO DE DATOS DEL PACIENTE -->
+    <section class="panel">
+        <h2>📋 Datos del Paciente</h2>
+        <p style="font-size: 0.9em; color: #666;">Ingrese los parámetros del paciente para calcular la dosificación óptima:</p>
+        
+        <div class="patient-form">
+            <div class="form-group">
+                <label for="edad">Edad (años):</label>
+                <input type="number" id="edad" name="edad" value="50" min="1" max="120" step="1">
+            </div>
+
+            <div class="form-group">
+                <label for="peso">Peso (kg):</label>
+                <input type="number" id="peso" name="peso" value="70" min="20" max="200" step="0.5">
+            </div>
+
+            <div class="form-group">
+                <label for="severidad">Severidad de síntomas (1-10):</label>
+                <div class="slider-container">
+                    <input type="range" id="severidad" name="severidad" value="5" min="1" max="10" step="1">
+                    <span id="severidad-value">5</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="tolerancia">Tolerancia a medicamentos (1-10):</label>
+                <div class="slider-container">
+                    <input type="range" id="tolerancia" name="tolerancia" value="5" min="1" max="10" step="1">
+                    <span id="tolerancia-value">5</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="actividad">Nivel de actividad física (1-10):</label>
+                <div class="slider-container">
+                    <input type="range" id="actividad" name="actividad" value="5" min="1" max="10" step="1">
+                    <span id="actividad-value">5</span>
+                </div>
+            </div>
+
+            <button onclick="calcularDosificacion()" class="btn-primary">Calcular Dosificación Óptima</button>
+        </div>
+    </section>
+
+    <!-- VISUALIZACIÓN DEL SISTEMA DE ECUACIONES -->
+    <section class="panel sistema-panel" id="sistema-section" style="display: none;">
+        <h2>🔍 Sistema de Ecuaciones Generado (Ax = b)</h2>
+        <p style="font-size: 0.9em; color: #666;">El sistema automáticamente generado basado en los parámetros del paciente:</p>
+        
+        <div class="ecuaciones-container">
+            <div class="matriz-container">
+                <h3>Matriz A (5×5) - Coeficientes</h3>
+                <div id="matriz-a" class="matriz"></div>
+            </div>
+
+            <div class="operador">×</div>
+
+            <div class="vector-container">
+                <h3>Vector x (5×1) - Incógnitas</h3>
+                <div id="vector-x" class="vector"></div>
+            </div>
+
+            <div class="operador">=</div>
+
+            <div class="vector-container">
+                <h3>Vector b (5×1) - Objetivos</h3>
+                <div id="vector-b" class="vector"></div>
+            </div>
+        </div>
+
+        <div style="margin-top: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+            <p style="margin: 0; font-size: 0.9em; color: #555;">
+                <strong>Nota:</strong> La matriz A es <span id="prop-diagonal" style="color: #27ae60;">diagonal dominante</span>, 
+                lo que garantiza convergencia de métodos iterativos. 
+                El vector b se ajusta automáticamente según los parámetros del paciente.
+            </p>
+        </div>
+    </section>
+
+    <!-- DIAGNÓSTICO DEL SISTEMA -->
+    <div id="diagnosis-container"></div>
+
+    <!-- SOLUCIONES POR MÉTODO -->
+    <section class="panel result" id="results-section" style="display: none;">
+        <h2>✓ Solución: Dosificación Óptima Recomendada</h2>
+        
+        <div id="solution-main" class="solution-main"></div>
+
+        <!-- COMPARACIÓN DE MÉTODOS NUMÉRICOS -->
+        <div style="margin-top: 40px; border-top: 2px solid #e0e0e0; padding-top: 30px;">
+            <h2>📊 Análisis Comparativo de Métodos Numéricos</h2>
+            <p style="color: #666; margin-bottom: 20px;">Comparación de los 5 métodos implementados:</p>
+
+            <div class="methods-grid">
+                <div id="metodo-jacobi" class="method-card"></div>
+                <div id="metodo-gauss_seidel" class="method-card"></div>
+                <div id="metodo-sor" class="method-card"></div>
+                <div id="metodo-gradiente_conjugado" class="method-card"></div>
+                <div id="metodo-gradiente_conjugado_precond" class="method-card"></div>
+                <div id="metodo-lu" class="method-card"></div>
+            </div>
+        </div>
+
+        <!-- DETALLES TÉCNICOS -->
+        <div style="margin-top: 30px; border-top: 2px solid #e0e0e0; padding-top: 20px;">
+            <h3>Detalles Técnicos</h3>
+            <div id="technical-details" class="technical-details"></div>
+        </div>
+    </section>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
