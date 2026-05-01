@@ -36,42 +36,35 @@ def construir_sistema(paciente_data, escenario="ideal"):
         6 + 1.5*act + tol,
         7.5 + 1.5*sev + 0.5*tol
     ], dtype=float)
-
-    if escenario == "estres":
-        A = A.copy()
-
-        for i in range(len(A)):
-            A[i][i] -= np.sum(np.abs(A[i])) * 0.3
-
-        A[1] = 0.85 * A[0] + 0.15 * A[1]
-        A[2] = 0.80 * A[1] + 0.20 * A[2]
-
-        noise = np.random.normal(0, 0.05, A.shape)
-        A += noise
-
-        b = b + np.random.normal(0, 0.1, size=len(b))
-
-    elif escenario == "mal":
-        A[1] = A[0] * 0.99
-        A[2] = A[0] * 1.01
-
+    
     return A, b
 
 def aplicar_escenario(A_base, escenario):
     A = A_base.copy()
 
+    n = len(A)
+
     if escenario == "ideal":
-        for i in range(len(A)):
-            A[i][i] = sum(abs(A[i])) + 5
+        # FUERTEMENTE diagonal dominante
+        for i in range(n):
+            A[i][i] = sum(abs(A[i])) + 10
 
     elif escenario == "estres":
-        # Escalar todo (más difícil numéricamente)
-        A = A * 50
+        # Quitar dominancia + ruido
+        for i in range(n):
+            A[i][i] *= 0.6
+
+        ruido = np.random.normal(0, 0.3, A.shape)
+        A += ruido
 
     elif escenario == "mal_condicionado":
-        # Hacer filas casi dependientes
-        A[1] = A[0] * 0.999  
-        A[2] = A[0] * 1.001
+        # Filas casi dependientes → determinante ≈ 0
+        A[1] = A[0] * 0.9999
+        A[2] = A[0] * 1.0001
+
+        # Reducir diagonales para empeorar condición
+        for i in range(n):
+            A[i][i] *= 0.3
 
     return A
 
@@ -359,8 +352,12 @@ def resolver():
         b = np.clip(b, -1e6, 1e6)
         
         cond = condicion_matriz(A)
+
+        if cond is None or not np.isfinite(cond):
+            cond = 1e12  # forzar mal condicionado
+
         clasificacion, _ = clasificar_sistema(A)
-        
+                
         if clasificacion == "mal_condicionado" and cond and cond > 1e6:
             try:
                 solucion = np.linalg.lstsq(A, b, rcond=None)[0]
@@ -368,7 +365,11 @@ def resolver():
             except:
                 res_lu = ([0.0]*len(b), 1, False)
         else:
-            res_lu = lu(A, b)
+            try:
+                res_lu = lu(A, b)
+            except:
+                solucion = np.linalg.lstsq(A, b, rcond=None)[0]
+                res_lu = (solucion.tolist(), 1, True)
         
         if not np.all(np.isfinite(res_lu[0])):
             res_lu = ([0.0]*len(b), 1, False)
@@ -382,7 +383,9 @@ def resolver():
         res_gcp = gradiente_conjugado_precond(A, b, tol, max_iter)
 
         recomendacion = obtener_recomendacion(clasificacion, cond)
-
+        A = np.nan_to_num(A, nan=0.0, posinf=1e6, neginf=-1e6)
+        b = np.nan_to_num(b, nan=0.0, posinf=1e6, neginf=-1e6)
+        # Generar y devolver respuesta
         return jsonify({
             "paciente": data,
             "matriz_A": A.tolist(),

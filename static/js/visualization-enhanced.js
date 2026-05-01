@@ -6,6 +6,7 @@ let scene3D, camera3D, renderer3D;
 let currentSolucion = null;
 let currentMatrizA = null;
 let currentAnalysis = null;
+let currentVectorB = null;
 let controls3D = null;
 
 // Variables de ejes seleccionados
@@ -105,7 +106,7 @@ function actualizarEjes() {
 
 // Validación robusta del sistema
 function validarSistemaParaVisualizacion() {
-    if (!currentMatrizA || !currentSolucion) {
+    if (!currentMatrizA || !currentSolucion || !currentVectorB) {
         mostrarWarning("3d", "Sin datos del sistema para visualizar");
         mostrarWarning("2d", "Sin datos del sistema para visualizar");
         return false;
@@ -228,7 +229,7 @@ function inicializar3D() {
     agregarEjes3D();
     
     // Dibujar planos
-    if (currentMatrizA && currentSolucion) {
+    if (currentMatrizA && currentSolucion && currentVectorB) {
         dibujarEcuaciones3D();
         dibujarPuntoSolucion3D();
     }
@@ -267,156 +268,134 @@ function agregarEjes3D() {
 }
 
 function dibujarEcuaciones3D() {
-    if (!currentMatrizA) return;
-    
+    if (!currentMatrizA || !currentSolucion || !currentVectorB) return;
+
     const A = currentMatrizA;
-    
-    // Determinar rango dinámico basado en los valores del sistema
-    const maxCoeff = Math.max(...A.flat().map(Math.abs));
-    const rango = Math.min(8, Math.max(3, 10 / (1 + maxCoeff / 10)));
-    const paso = Math.max(1, rango / 4); // Máximo 16 puntos por eje
-    
-    for (let eqIdx = 0; eqIdx < Math.min(2, A.length); eqIdx++) { // Solo 2 planos
+    const bVec = currentVectorB;
+    const sol = currentSolucion;
+
+    const rango = 10;
+    const paso = 1.5;
+
+    for (let eqIdx = 0; eqIdx < A.length; eqIdx++) {
         const fila = A[eqIdx];
-        const colorData = coloresEcuaciones[eqIdx];
-        
-        // Validar que hay coeficientes significativos
-        const coeff = [
-            Math.abs(fila[selectedAxisX] || 0),
-            Math.abs(fila[selectedAxisY] || 0),
-            Math.abs(fila[selectedAxisZ] || 0)
-        ];
-        
-        if (coeff.every(c => c < 1e-10)) continue; // Saltar filas con coeficientes nulos
-        
+
+        // índices que NO están en el plano
+        const restantes = [0,1,2,3,4].filter(i =>
+            i !== selectedAxisX &&
+            i !== selectedAxisY &&
+            i !== selectedAxisZ
+        );
+
+        const divisor = fila[selectedAxisZ];
+
+        if (Math.abs(divisor) < 1e-10) continue;
+
         const vertices = [];
         const indices = [];
-        let vertexCount = 0;
-        const vertexMap = new Map();
-        
-        // Limitar cantidad máxima de vértices
-        const maxVertices = 100;
-        let addedVertices = 0;
-        
-        // Generar malla simplificada
-        for (let u = -rango; u <= rango; u += paso) {
-            for (let v = -rango; v <= rango; v += paso) {
-                if (addedVertices >= maxVertices) break;
-                
-                const x = u;
-                const y = v;
-                
-                // Cálculo seguro de z
-                let z;
-                const divisor = fila[selectedAxisZ] || 1;
-                
-                if (Math.abs(divisor) < 1e-10) {
-                    z = 0; // Plano paralelo
-                } else {
-                    z = (10 - coeff[0] * x - coeff[1] * y) / divisor;
-                    
-                    // Clamping para valores extremos
-                    z = Math.max(-15, Math.min(15, z));
-                    
-                    if (!isFinite(z)) z = 0;
+        let index = 0;
+
+        const size = Math.floor((2 * rango) / paso) + 1;
+
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+
+                const x = -rango + i * paso;
+                const y = -rango + j * paso;
+
+                let z = (
+                    bVec[eqIdx]
+                    - fila[selectedAxisX] * x
+                    - fila[selectedAxisY] * y
+                    - fila[restantes[0]] * sol[restantes[0]]
+                    - fila[restantes[1]] * sol[restantes[1]]
+                ) / divisor;
+
+                if (!isFinite(z)) z = 0;
+
+                vertices.push(x, y, z);
+
+                if (i < size - 1 && j < size - 1) {
+                    const a = index;
+                    const b = index + 1;
+                    const c = index + size;
+                    const d = index + size + 1;
+
+                    indices.push(a, b, c);
+                    indices.push(b, d, c);
                 }
-                
-                vertices.push(x, y, z + eqIdx * 1.5);
-                vertexMap.set(`${u},${v}`, vertexCount);
-                
-                // Crear triángulos solo si hay vértices suficientes
-                if (u < rango && v < rango) {
-                    const a = vertexMap.get(`${u},${v}`);
-                    const b = vertexMap.get(`${u + paso},${v}`);
-                    const c = vertexMap.get(`${u},${v + paso}`);
-                    const d = vertexMap.get(`${u + paso},${v + paso}`);
-                    
-                    if (a !== undefined && b !== undefined && c !== undefined) {
-                        indices.push(a, b, c);
-                    }
-                    if (b !== undefined && c !== undefined && d !== undefined) {
-                        indices.push(b, d, c);
-                    }
-                }
-                vertexCount++;
-                addedVertices++;
+
+                index++;
             }
-            if (addedVertices >= maxVertices) break;
         }
-        
-        if (vertices.length > 0) {
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.BufferAttribute(
-                new Float32Array(vertices), 3
-            ));
-            if (indices.length > 0) {
-                geometry.setIndex(new THREE.BufferAttribute(
-                    new Uint32Array(indices), 1
-                ));
-                geometry.computeVertexNormals();
-            }
-            
-            const material = new THREE.MeshPhongMaterial({
-                color: colorData.color,
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(new Float32Array(vertices), 3)
+        );
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        // Color tipo GeoGebra (suave + transparente)
+        const colorBase = coloresEcuaciones[eqIdx % coloresEcuaciones.length].color;
+
+        const material = new THREE.MeshPhongMaterial({
+            color: colorBase,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        scene3D.add(mesh);
+
+        // Bordes tipo GeoGebra
+        const edges = new THREE.EdgesGeometry(geometry);
+        const line = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({
+                color: colorBase,
                 transparent: true,
-                opacity: 0.2,
-                side: THREE.DoubleSide,
-                flatShading: true, // Mejor rendimiento
-                wireframe: false
-            });
-            
-            const malla = new THREE.Mesh(geometry, material);
-            scene3D.add(malla);
-            
-            // Wireframe simplificado (solo bordes)
-            if (indices.length > 0) {
-                const edges = new THREE.EdgesGeometry(geometry, 20);
-                const lineMaterial = new THREE.LineBasicMaterial({
-                    color: colorData.color,
-                    opacity: 0.4,
-                    transparent: true,
-                    linewidth: 1
-                });
-                const wireframe = new THREE.LineSegments(edges, lineMaterial);
-                scene3D.add(wireframe);
-            }
-        }
+                opacity: 0.5
+            })
+        );
+        scene3D.add(line);
     }
 }
 
 function dibujarPuntoSolucion3D() {
     if (!currentSolucion) return;
-    
-    const geometry = new THREE.SphereGeometry(0.7, 32, 32);
+
+    const geometry = new THREE.SphereGeometry(0.8, 32, 32);
     const material = new THREE.MeshPhongMaterial({
-        color: 0x27ae60,
-        emissive: 0x1abc9c,
-        shininess: 100,
-        wireframe: false
+        color: 0x00cc66,
+        emissive: 0x00ffcc,
+        shininess: 120
     });
-    
+
     const punto = new THREE.Mesh(geometry, material);
+
     punto.position.set(
-        currentSolucion[selectedAxisX] || 0,
-        currentSolucion[selectedAxisY] || 0,
-        currentSolucion[selectedAxisZ] || 0
+        currentSolucion[selectedAxisX],
+        currentSolucion[selectedAxisY],
+        currentSolucion[selectedAxisZ]
     );
-    
+
     scene3D.add(punto);
-    
-    // Órbita de luz
-    const orbitGeometry = new THREE.SphereGeometry(1.2, 16, 16);
-    const orbitMaterial = new THREE.LineBasicMaterial({
-        color: 0x27ae60,
+
+    // efecto tipo "halo"
+    const halo = new THREE.SphereGeometry(1.5, 16, 16);
+    const haloMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffcc,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.15
     });
-    const orbit = new THREE.LineSegments(
-        new THREE.WireframeGeometry(orbitGeometry),
-        orbitMaterial
-    );
-    orbit.position.copy(punto.position);
-    scene3D.add(orbit);
+
+    const glow = new THREE.Mesh(halo, haloMat);
+    glow.position.copy(punto.position);
+    scene3D.add(glow);
 }
 
 function implementarControles3D() {
@@ -481,106 +460,126 @@ function animate3D() {
 
 function dibujarGrafico2D() {
     const canvas = document.getElementById("canvas-2d");
-    if (!canvas || !currentSolucion) return;
-    
+    if (!canvas || !currentMatrizA || !currentVectorB) return;
+
     try {
         const ctx = canvas.getContext('2d');
         const width = canvas.width = canvas.parentElement.clientWidth;
         const height = canvas.height = 450;
-        
-        // Fondo
+
         ctx.fillStyle = '#fafbfc';
         ctx.fillRect(0, 0, width, height);
-        
+
         const margin = 70;
         const plotWidth = width - 2 * margin;
         const plotHeight = height - 2 * margin;
-        
-        // Títulos de ejes
-        document.getElementById("canvas-2d-title").textContent = 
+
+        const A = currentMatrizA;
+        const bVec = currentVectorB;
+        const sol = currentSolucion;
+
+        document.getElementById("canvas-2d-title").textContent =
             `Proyección 2D: ${axisNames[selectedAxisX]} vs ${axisNames[selectedAxisY]}`;
-        
+
         // Ejes
         ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2;
+
         ctx.beginPath();
         ctx.moveTo(margin, height - margin);
         ctx.lineTo(margin, margin);
         ctx.stroke();
-        
+
         ctx.beginPath();
         ctx.moveTo(margin, height - margin);
         ctx.lineTo(width - margin, height - margin);
         ctx.stroke();
-        
-        // Etiquetas
-        ctx.fillStyle = '#333';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(axisNames[selectedAxisX], width / 2, height - 15);
-        
-        ctx.save();
-        ctx.translate(15, height / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillText(axisNames[selectedAxisY], 0, 0);
-        ctx.restore();
-        
-        // Escala segura
-        const val1 = currentSolucion[selectedAxisX] || 0;
-        const val2 = currentSolucion[selectedAxisY] || 0;
-        
-        if (!isFinite(val1) || !isFinite(val2)) {
-            ctx.fillStyle = '#e74c3c';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Datos no válidos para proyección 2D', width / 2, height / 2);
-            return;
+
+        // Escala fija (mejor estabilidad visual)
+        const escala = 10;
+
+        function toCanvasX(x) {
+            return margin + (x / escala) * plotWidth / 2 + plotWidth / 2;
         }
-        
-        const maxVal = Math.max(Math.abs(val1), Math.abs(val2)) * 1.8 + 1;
-        const clampedMaxVal = Math.min(maxVal, 100); // Limitar escala
-        
-        // Grid y números
-        ctx.strokeStyle = '#e8e8e8';
-        ctx.lineWidth = 1;
-        ctx.font = '11px Arial';
-        ctx.fillStyle = '#999';
-        ctx.textAlign = 'right';
-        
-        for (let i = 0; i <= 10; i++) {
-            const x = margin + (i / 10) * plotWidth;
-            const y = height - margin - (i / 10) * plotHeight;
-            
-            ctx.beginPath();
-            ctx.moveTo(x, margin);
-            ctx.lineTo(x, height - margin);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.moveTo(margin, y);
-            ctx.lineTo(width - margin, y);
-            ctx.stroke();
-            
-            const val = (i / 10) * clampedMaxVal;
-            ctx.fillText(val.toFixed(1), margin - 10, y + 4);
-            ctx.textAlign = 'center';
-            ctx.fillText(val.toFixed(1), x, height - margin + 20);
+
+        function toCanvasY(y) {
+            return height - margin - (y / escala) * plotHeight / 2 - plotHeight / 2;
         }
-        
-        // Punto solución
-        const px = margin + (val1 / clampedMaxVal) * plotWidth * 0.5 + plotWidth * 0.25;
-        const py = height - margin - (val2 / clampedMaxVal) * plotHeight * 0.5 - plotHeight * 0.25;
-        
-        ctx.fillStyle = '#27ae60';
-        ctx.beginPath();
-        ctx.arc(px, py, 8, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        ctx.strokeStyle = '#27ae60';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
+
+        // =========================
+        // DIBUJAR ECUACIONES (RECTAS)
+        // =========================
+        for (let i = 0; i < A.length; i++) {
+
+            const a = A[i][selectedAxisX];
+            const b = A[i][selectedAxisY];
+
+            // variables que NO están en el plano
+            const restantes = [0,1,2,3,4].filter(idx =>
+                idx !== selectedAxisX &&
+                idx !== selectedAxisY
+            );
+
+            // sustituimos con solución SOLO para reducir dimensión
+            let c = bVec[i];
+
+            if (sol) {
+                c -= A[i][restantes[0]] * sol[restantes[0]];
+                c -= A[i][restantes[1]] * sol[restantes[1]];
+                c -= A[i][restantes[2]] * sol[restantes[2]];
+            }
+
+            // evitar división por cero
+            if (Math.abs(b) < 1e-10) continue;
+
+            // forma: y = (c - a*x)/b
+            ctx.beginPath();
+
+            const colorHex = '#' + coloresEcuaciones[i].color.toString(16).padStart(6, '0');
+            ctx.strokeStyle = colorHex;
+            ctx.lineWidth = 2;
+
+            let firstPoint = true;
+
+            for (let x = -escala; x <= escala; x += 0.5) {
+                const y = (c - a * x) / b;
+
+                if (!isFinite(y)) continue;
+
+                const px = toCanvasX(x);
+                const py = toCanvasY(y);
+
+                if (firstPoint) {
+                    ctx.moveTo(px, py);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
+
+            ctx.stroke();
+        }
+
+        // =========================
+        // PUNTO SOLUCIÓN
+        // =========================
+        if (sol) {
+            const x = sol[selectedAxisX];
+            const y = sol[selectedAxisY];
+
+            if (isFinite(x) && isFinite(y)) {
+                const px = toCanvasX(x);
+                const py = toCanvasY(y);
+
+                ctx.fillStyle = '#27ae60';
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
         generarLeyenda2D();
+
     } catch (e) {
         console.error('Error en dibujarGrafico2D:', e);
     }
@@ -646,14 +645,9 @@ function rgbFromHex(hex) {
 }
 
 // Actualizar visualización
-function actualizarVisualizacion(matrizA, solucion, analysis) {
-    if (matrizA) {
-        currentMatrizA = matrizA;
-    }
-    if (solucion && solucion.length > 0) {
-        currentSolucion = solucion;
-    }
-    if (analysis) {
-        currentAnalysis = analysis;
-    }
+function actualizarVisualizacion(matrizA, solucion, analysis, vectorB) {
+    if (matrizA) currentMatrizA = matrizA;
+    if (solucion && solucion.length > 0) currentSolucion = solucion;
+    if (analysis) currentAnalysis = analysis;
+    if (vectorB) currentVectorB = vectorB;
 }

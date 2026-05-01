@@ -1,6 +1,7 @@
-streamlit
+flask
 numpy
 scipy
 pandas
-fastapi
-uvicorn
+matplotlib
+sympy
+Pillow

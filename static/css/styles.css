@@ -1210,3 +1210,126 @@ header p {
         justify-content: center;
     }
 }
+
+/* ===== VISUALIZACIONES MATEMÁTICAS MEJORADAS ===== */
+
+.visualizaciones-panel {
+    background: linear-gradient(135deg, #f8fafc 0%, #f0f4f8 100%);
+    border: 2px solid #a8c7d8;
+    border-radius: 12px;
+    padding: 30px;
+    margin-top: 30px;
+    box-shadow: 0 4px 12px rgba(52, 73, 94, 0.08);
+    animation: fadeIn 0.6s ease-out;
+}
+
+.visualizaciones-panel h2 {
+    color: #2c3e50;
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.visualizaciones-panel p {
+    color: #7f8c8d;
+    margin-bottom: 20px;
+}
+
+/* Tabs principales de visualizaciones */
+.viz-tabs-main {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #e0e8f0;
+    padding-bottom: 15px;
+}
+
+.viz-tab-main-btn {
+    padding: 12px 20px;
+    background: #ffffff;
+    border: 2px solid #e0e8f0;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #7f8c8d;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.viz-tab-main-btn:hover {
+    background: #f0f4f8;
+    border-color: #a8c7d8;
+    color: #2c3e50;
+    transform: translateY(-2px);
+}
+
+.viz-tab-main-btn.active {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border-color: #2980b9;
+    color: white;
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.2);
+}
+
+/* Contenedor de visualizaciones */
+.viz-main-content {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e8eef5;
+    display: none;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.viz-main-content.active {
+    display: block;
+}
+
+.viz-main-content img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.viz-main-content img:hover {
+    transform: scale(1.02);
+}
+
+/* Estilos para ecuaciones */
+.ecuaciones-display {
+    background: #f9fafb;
+    border-left: 4px solid #3498db;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin: 10px 0;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    color: #2c3e50;
+    line-height: 1.8;
+    overflow-x: auto;
+}
+
+/* Responsive para visualizaciones */
+@media (max-width: 768px) {
+    .visualizaciones-panel {
+        padding: 20px;
+    }
+    
+    .viz-tabs-main {
+        gap: 5px;
+    }
+    
+    .viz-tab-main-btn {
+        padding: 10px 15px;
+        font-size: 13px;
+    }
+    
+    .viz-main-content {
+        padding: 15px;
+    }
+}

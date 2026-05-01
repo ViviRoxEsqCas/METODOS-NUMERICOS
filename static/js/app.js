@@ -89,7 +89,13 @@ async function calcularDosificacion() {
     const tolerancia = parseInt(document.getElementById("tolerancia").value);
     const actividad = parseInt(document.getElementById("actividad").value);
 
-    if (!edad || !peso || !severidad || !tolerancia || !actividad) {
+    if (
+        isNaN(edad) || 
+        isNaN(peso) || 
+        isNaN(severidad) || 
+        isNaN(tolerancia) || 
+        isNaN(actividad)
+    ) {
         alert("Por favor, complete todos los campos.");
         return;
     }
@@ -168,7 +174,12 @@ function mostrarSistemaEcuaciones(data) {
     document.getElementById("sistema-section").style.display = "block";
     
     // Actualizar visualización 3D/2D
-    actualizarVisualizacion(matrizA, []);
+    actualizarVisualizacion(
+        matrizA,
+        data.solucion ? data.solucion.valores : null,
+        data.analisis,
+        vectorB
+    );
 }
 
 // =========================
@@ -203,11 +214,6 @@ function mostrarDiagnostico(analisis) {
             </div>
         </section>
     `;
-    
-    // Actualizar análisis en visualización
-    if (typeof actualizarVisualizacion === 'function') {
-        actualizarVisualizacion(null, null, analisis);
-    }
 }
 
 // =========================
@@ -242,9 +248,6 @@ function mostrarSolucion(data) {
 
     container.innerHTML = html;
     document.getElementById("results-section").style.display = "block";
-    
-    // Actualizar visualización con la solución
-    actualizarVisualizacion(null, valores);
 }
 
 // =========================
@@ -337,5 +340,6 @@ function mostrarDetallesTecnicos(data) {
 
     container.innerHTML = html;
 }
+
 
 
