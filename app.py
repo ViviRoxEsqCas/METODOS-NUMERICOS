@@ -52,7 +52,7 @@ def aplicar_escenario(A_base, escenario):
     elif escenario == "estres":
         A = A_base.copy()
 
-        # hacerla moderadamente mal condicionada
+        # Moderadamente mal condicionada
         A[1] = A[0] * 0.9
         A[2] = A[0] * 1.1
 
