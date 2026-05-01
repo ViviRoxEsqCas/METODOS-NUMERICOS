@@ -111,19 +111,26 @@ function validarSistemaParaVisualizacion() {
         return false;
     }
     
+    // Verificar que la solución contiene números válidos
+    if (!currentSolucion.every(v => isFinite(v))) {
+        mostrarWarning("3d", "⚠️ Solución contiene valores inválidos (inf/nan)");
+        mostrarWarning("2d", "⚠️ Solución contiene valores inválidos");
+        return false;
+    }
+    
     // Verificar determinante (muy pequeño = problema)
     const det = calcularDeterminante(currentMatrizA);
     
     if (isNaN(det) || !isFinite(det)) {
-        mostrarWarning("3d", "⚠️ Sistema singular o mal condicionado - La matriz es singular");
-        mostrarWarning("2d", "⚠️ Sistema singular o mal condicionado - La matriz es singular");
-        return false;
+        mostrarWarning("3d", "⚠️ Sistema singular - La matriz es singular, visualización aproximada");
+        mostrarWarning("2d", "⚠️ Sistema singular - Resultados pueden no ser exactos");
+        return true; // Permitir pero con advertencia
     }
     
     if (Math.abs(det) < 1e-10) {
-        mostrarWarning("3d", "⚠️ Sistema mal condicionado - Determinante cercano a cero (det ≈ " + det.toExponential(2) + ")");
-        mostrarWarning("2d", "⚠️ Sistema mal condicionado - La matriz está casi singular");
-        return true; // Permitir visualización pero con advertencia
+        mostrarWarning("3d", "⚠️ Sistema mal condicionado (det ≈ " + det.toExponential(2) + ") - Visualización simplificada");
+        mostrarWarning("2d", "⚠️ Matriz casi singular - Visualización aproximada");
+        return true; // Permitir pero con advertencia
     }
     
     // Verificar número de condición
@@ -263,39 +270,78 @@ function dibujarEcuaciones3D() {
     if (!currentMatrizA) return;
     
     const A = currentMatrizA;
-    const rango = 12;
-    const paso = 2;
     
-    for (let eqIdx = 0; eqIdx < Math.min(3, A.length); eqIdx++) {
+    // Determinar rango dinámico basado en los valores del sistema
+    const maxCoeff = Math.max(...A.flat().map(Math.abs));
+    const rango = Math.min(8, Math.max(3, 10 / (1 + maxCoeff / 10)));
+    const paso = Math.max(1, rango / 4); // Máximo 16 puntos por eje
+    
+    for (let eqIdx = 0; eqIdx < Math.min(2, A.length); eqIdx++) { // Solo 2 planos
         const fila = A[eqIdx];
         const colorData = coloresEcuaciones[eqIdx];
         
+        // Validar que hay coeficientes significativos
+        const coeff = [
+            Math.abs(fila[selectedAxisX] || 0),
+            Math.abs(fila[selectedAxisY] || 0),
+            Math.abs(fila[selectedAxisZ] || 0)
+        ];
+        
+        if (coeff.every(c => c < 1e-10)) continue; // Saltar filas con coeficientes nulos
+        
         const vertices = [];
         const indices = [];
-        
         let vertexCount = 0;
+        const vertexMap = new Map();
         
-        // Generar malla
+        // Limitar cantidad máxima de vértices
+        const maxVertices = 100;
+        let addedVertices = 0;
+        
+        // Generar malla simplificada
         for (let u = -rango; u <= rango; u += paso) {
             for (let v = -rango; v <= rango; v += paso) {
+                if (addedVertices >= maxVertices) break;
+                
                 const x = u;
                 const y = v;
-                const z = (10 - fila[selectedAxisX] * x - fila[selectedAxisY] * y) / (fila[selectedAxisZ] || 1);
                 
-                if (isFinite(z)) {
-                    vertices.push(x, y, z + eqIdx * 1.5);
+                // Cálculo seguro de z
+                let z;
+                const divisor = fila[selectedAxisZ] || 1;
+                
+                if (Math.abs(divisor) < 1e-10) {
+                    z = 0; // Plano paralelo
+                } else {
+                    z = (10 - coeff[0] * x - coeff[1] * y) / divisor;
                     
-                    if (u < rango && v < rango) {
-                        const a = vertexCount;
-                        const b = a + (2 * rango / paso + 1);
-                        if (b + 1 < vertices.length / 3) {
-                            indices.push(a, b, a + 1);
-                            indices.push(b, b + 1, a + 1);
-                        }
-                    }
-                    vertexCount++;
+                    // Clamping para valores extremos
+                    z = Math.max(-15, Math.min(15, z));
+                    
+                    if (!isFinite(z)) z = 0;
                 }
+                
+                vertices.push(x, y, z + eqIdx * 1.5);
+                vertexMap.set(`${u},${v}`, vertexCount);
+                
+                // Crear triángulos solo si hay vértices suficientes
+                if (u < rango && v < rango) {
+                    const a = vertexMap.get(`${u},${v}`);
+                    const b = vertexMap.get(`${u + paso},${v}`);
+                    const c = vertexMap.get(`${u},${v + paso}`);
+                    const d = vertexMap.get(`${u + paso},${v + paso}`);
+                    
+                    if (a !== undefined && b !== undefined && c !== undefined) {
+                        indices.push(a, b, c);
+                    }
+                    if (b !== undefined && c !== undefined && d !== undefined) {
+                        indices.push(b, d, c);
+                    }
+                }
+                vertexCount++;
+                addedVertices++;
             }
+            if (addedVertices >= maxVertices) break;
         }
         
         if (vertices.length > 0) {
@@ -307,28 +353,33 @@ function dibujarEcuaciones3D() {
                 geometry.setIndex(new THREE.BufferAttribute(
                     new Uint32Array(indices), 1
                 ));
+                geometry.computeVertexNormals();
             }
             
             const material = new THREE.MeshPhongMaterial({
                 color: colorData.color,
                 transparent: true,
-                opacity: 0.25,
+                opacity: 0.2,
                 side: THREE.DoubleSide,
-                flatShading: false
+                flatShading: true, // Mejor rendimiento
+                wireframe: false
             });
             
             const malla = new THREE.Mesh(geometry, material);
             scene3D.add(malla);
             
-            // Wireframe
-            const wireGeometry = new THREE.WireframeGeometry(geometry);
-            const lineMaterial = new THREE.LineBasicMaterial({
-                color: colorData.color,
-                opacity: 0.5,
-                transparent: true
-            });
-            const wireframe = new THREE.LineSegments(wireGeometry, lineMaterial);
-            scene3D.add(wireframe);
+            // Wireframe simplificado (solo bordes)
+            if (indices.length > 0) {
+                const edges = new THREE.EdgesGeometry(geometry, 20);
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: colorData.color,
+                    opacity: 0.4,
+                    transparent: true,
+                    linewidth: 1
+                });
+                const wireframe = new THREE.LineSegments(edges, lineMaterial);
+                scene3D.add(wireframe);
+            }
         }
     }
 }
@@ -430,138 +481,109 @@ function animate3D() {
 
 function dibujarGrafico2D() {
     const canvas = document.getElementById("canvas-2d");
-    if (!canvas) return;
+    if (!canvas || !currentSolucion) return;
     
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width = canvas.parentElement.clientWidth;
-    const height = canvas.height = 450;
-    
-    // Fondo
-    ctx.fillStyle = '#fafbfc';
-    ctx.fillRect(0, 0, width, height);
-    
-    const margin = 70;
-    const plotWidth = width - 2 * margin;
-    const plotHeight = height - 2 * margin;
-    
-    // Títulos de ejes
-    document.getElementById("canvas-2d-title").textContent = 
-        `Proyección 2D: ${axisNames[selectedAxisX]} vs ${axisNames[selectedAxisY]}`;
-    
-    // Ejes
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(margin, height - margin);
-    ctx.lineTo(margin, margin);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(margin, height - margin);
-    ctx.lineTo(width - margin, height - margin);
-    ctx.stroke();
-    
-    // Etiquetas
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(axisNames[selectedAxisX], width / 2, height - 15);
-    
-    ctx.save();
-    ctx.translate(15, height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText(axisNames[selectedAxisY], 0, 0);
-    ctx.restore();
-    
-    // Escala
-    const maxVal = Math.max(...currentSolucion.slice(0, 2)) * 1.8;
-    
-    // Grid y números
-    ctx.strokeStyle = '#e8e8e8';
-    ctx.lineWidth = 1;
-    ctx.font = '11px Arial';
-    ctx.fillStyle = '#999';
-    ctx.textAlign = 'right';
-    
-    for (let i = 0; i <= 10; i++) {
-        const x = margin + (i / 10) * plotWidth;
-        const y = height - margin - (i / 10) * plotHeight;
+    try {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width = canvas.parentElement.clientWidth;
+        const height = canvas.height = 450;
         
+        // Fondo
+        ctx.fillStyle = '#fafbfc';
+        ctx.fillRect(0, 0, width, height);
+        
+        const margin = 70;
+        const plotWidth = width - 2 * margin;
+        const plotHeight = height - 2 * margin;
+        
+        // Títulos de ejes
+        document.getElementById("canvas-2d-title").textContent = 
+            `Proyección 2D: ${axisNames[selectedAxisX]} vs ${axisNames[selectedAxisY]}`;
+        
+        // Ejes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.moveTo(x, margin);
-        ctx.lineTo(x, height - margin);
+        ctx.moveTo(margin, height - margin);
+        ctx.lineTo(margin, margin);
         ctx.stroke();
         
         ctx.beginPath();
-        ctx.moveTo(margin, y);
-        ctx.lineTo(width - margin, y);
+        ctx.moveTo(margin, height - margin);
+        ctx.lineTo(width - margin, height - margin);
         ctx.stroke();
         
-        const val = (i / 10) * maxVal;
-        ctx.fillText(val.toFixed(1), margin - 15, height - margin + 5 + (i / 10) * plotHeight);
-        ctx.fillText(val.toFixed(1), margin - 10 + (i / 10) * plotWidth, height - margin + 20);
-    }
-    
-    // Líneas de ecuaciones
-    if (currentMatrizA) {
-        const A = currentMatrizA;
+        // Etiquetas
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(axisNames[selectedAxisX], width / 2, height - 15);
         
-        for (let eqIdx = 0; eqIdx < Math.min(3, A.length); eqIdx++) {
-            const fila = A[eqIdx];
-            const colorData = coloresEcuaciones[eqIdx];
-            
-            ctx.strokeStyle = rgbFromHex(colorData.color);
-            ctx.lineWidth = 3;
-            ctx.globalAlpha = 0.75;
-            ctx.beginPath();
-            
-            let started = false;
-            for (let x = 0; x <= maxVal; x += maxVal / 100) {
-                let y = 0;
-                if (fila[selectedAxisY] !== 0) {
-                    y = (10 - fila[selectedAxisX] * x) / fila[selectedAxisY];
-                }
-                
-                const screenX = margin + (x / maxVal) * plotWidth;
-                const screenY = height - margin - (y / maxVal) * plotHeight;
-                
-                if (y >= 0 && y <= maxVal) {
-                    if (!started) {
-                        ctx.moveTo(screenX, screenY);
-                        started = true;
-                    } else {
-                        ctx.lineTo(screenX, screenY);
-                    }
-                }
-            }
-            ctx.stroke();
-            ctx.globalAlpha = 1;
+        ctx.save();
+        ctx.translate(15, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(axisNames[selectedAxisY], 0, 0);
+        ctx.restore();
+        
+        // Escala segura
+        const val1 = currentSolucion[selectedAxisX] || 0;
+        const val2 = currentSolucion[selectedAxisY] || 0;
+        
+        if (!isFinite(val1) || !isFinite(val2)) {
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Datos no válidos para proyección 2D', width / 2, height / 2);
+            return;
         }
-    }
-    
-    // Punto solución
-    if (currentSolucion) {
-        const x = currentSolucion[selectedAxisX];
-        const y = currentSolucion[selectedAxisY];
         
-        const screenX = margin + (x / maxVal) * plotWidth;
-        const screenY = height - margin - (y / maxVal) * plotHeight;
+        const maxVal = Math.max(Math.abs(val1), Math.abs(val2)) * 1.8 + 1;
+        const clampedMaxVal = Math.min(maxVal, 100); // Limitar escala
+        
+        // Grid y números
+        ctx.strokeStyle = '#e8e8e8';
+        ctx.lineWidth = 1;
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'right';
+        
+        for (let i = 0; i <= 10; i++) {
+            const x = margin + (i / 10) * plotWidth;
+            const y = height - margin - (i / 10) * plotHeight;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, margin);
+            ctx.lineTo(x, height - margin);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(margin, y);
+            ctx.lineTo(width - margin, y);
+            ctx.stroke();
+            
+            const val = (i / 10) * clampedMaxVal;
+            ctx.fillText(val.toFixed(1), margin - 10, y + 4);
+            ctx.textAlign = 'center';
+            ctx.fillText(val.toFixed(1), x, height - margin + 20);
+        }
+        
+        // Punto solución
+        const px = margin + (val1 / clampedMaxVal) * plotWidth * 0.5 + plotWidth * 0.25;
+        const py = height - margin - (val2 / clampedMaxVal) * plotHeight * 0.5 - plotHeight * 0.25;
         
         ctx.fillStyle = '#27ae60';
         ctx.beginPath();
-        ctx.arc(screenX, screenY, 7, 0, 2 * Math.PI);
+        ctx.arc(px, py, 8, 0, 2 * Math.PI);
         ctx.fill();
         
         ctx.strokeStyle = '#27ae60';
         ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.2;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, 14, 0, 2 * Math.PI);
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        
+        generarLeyenda2D();
+    } catch (e) {
+        console.error('Error en dibujarGrafico2D:', e);
     }
-    
-    generarLeyenda2D();
 }
 
 function generarLeyenda3D() {

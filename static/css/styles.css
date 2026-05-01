@@ -4,6 +4,21 @@ body {
     background: linear-gradient(135deg, #f4f6f8 0%, #eef2f5 100%);
     color: #333;
     min-height: 100vh;
+    position: relative;
+}
+
+.watermark {
+    position: fixed;
+    top: 20px;
+    right: 30px;
+    font-size: 14px;
+    color: rgba(52, 73, 94, 0.3);
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 999;
+    letter-spacing: 1px;
+    font-family: "Courier New", monospace;
+    white-space: nowrap;
 }
 
 .container {

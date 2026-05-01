@@ -15,16 +15,12 @@ def construir_sistema(paciente_data, escenario="ideal"):
     tolerancia = float(paciente_data.get("tolerancia", 5))
     actividad = float(paciente_data.get("actividad", 5))
 
-    # Normalización
     edad_f = edad / 50
     peso_f = peso / 70
     sev = severidad / 10
     tol = tolerancia / 10
     act = actividad / 10
 
-    # =========================
-    # SISTEMA BASE (IDEAL)
-    # =========================
     A = np.array([
         [10 + 2*edad_f, 1 + 0.3*sev, 0.5, 0.3, 0.2],
         [0.5, 11 + 2*sev, 1, 0.5, 0.3],
@@ -41,30 +37,22 @@ def construir_sistema(paciente_data, escenario="ideal"):
         7.5 + 1.5*sev + 0.5*tol
     ], dtype=float)
 
-    # =========================
-    # TRANSFORMACIONES
-    # =========================
-
     if escenario == "estres":
         A = A.copy()
 
-        # perder diagonal dominante
         for i in range(len(A)):
             A[i][i] -= np.sum(np.abs(A[i])) * 0.3
 
-        # introducir correlación entre filas (dependencia)
         A[1] = 0.85 * A[0] + 0.15 * A[1]
         A[2] = 0.80 * A[1] + 0.20 * A[2]
 
-        # ruido fisiológico
         noise = np.random.normal(0, 0.05, A.shape)
         A += noise
 
         b = b + np.random.normal(0, 0.1, size=len(b))
 
     elif escenario == "mal":
-        # Hacer filas casi dependientes (problema real)
-        A[1] = A[0] * 0.99   # casi igual
+        A[1] = A[0] * 0.99
         A[2] = A[0] * 1.01
 
     return A, b
@@ -73,7 +61,6 @@ def aplicar_escenario(A_base, escenario):
     A = A_base.copy()
 
     if escenario == "ideal":
-        # Forzar diagonal dominante fuerte
         for i in range(len(A)):
             A[i][i] = sum(abs(A[i])) + 5
 
@@ -93,84 +80,134 @@ def aplicar_escenario(A_base, escenario):
 # =========================
 
 def jacobi(A, b, tol, max_iter):
-    n = len(b)
-    x = np.zeros(n)
-    D = np.diag(A)
-    R = A - np.diagflat(D)
+    try:
+        n = len(b)
+        x = np.zeros(n)
+        D = np.diag(A)
+        
+        if np.any(np.abs(D) < 1e-10):
+            return [0.0]*n, 0, False
+            
+        R = A - np.diagflat(D)
 
-    for k in range(max_iter):
-        x_new = (b - np.dot(R, x)) / D
+        for k in range(max_iter):
+            x_new = (b - np.dot(R, x)) / D
+            
+            if not np.all(np.isfinite(x_new)):
+                return x.tolist(), k, False
+            
+            x_new = np.clip(x_new, -1e8, 1e8)
 
-        if np.linalg.norm(x_new - x, np.inf) < tol:
-            return x_new.tolist(), k+1, True
+            if np.linalg.norm(x_new - x, np.inf) < tol:
+                return x_new.tolist(), k+1, True
 
-        x = x_new
+            x = x_new
 
-    return x.tolist(), max_iter, False
+        return x.tolist(), max_iter, False
+    except Exception as e:
+        print(f"Error en Jacobi: {e}")
+        return [0.0]*len(b), 0, False
 
 
 def gauss_seidel(A, b, tol, max_iter):
-    n = len(b)
-    x = np.zeros(n)
+    try:
+        n = len(b)
+        x = np.zeros(n)
 
-    for k in range(max_iter):
-        x_old = x.copy()
+        for k in range(max_iter):
+            x_old = x.copy()
 
-        for i in range(n):
-            s1 = sum(A[i][j] * x[j] for j in range(i))
-            s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
-            x[i] = (b[i] - s1 - s2) / A[i][i]
+            for i in range(n):
+                if abs(A[i][i]) < 1e-10:
+                    return [0.0]*n, k, False
+                    
+                s1 = sum(A[i][j] * x[j] for j in range(i))
+                s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
+                x[i] = (b[i] - s1 - s2) / A[i][i]
+            
+            if not np.all(np.isfinite(x)):
+                return x_old.tolist(), k, False
+                
+            x = np.clip(x, -1e8, 1e8)
 
-        if np.linalg.norm(x - x_old, np.inf) < tol:
-            return x.tolist(), k+1, True
+            if np.linalg.norm(x - x_old, np.inf) < tol:
+                return x.tolist(), k+1, True
 
-    return x.tolist(), max_iter, False
+        return x.tolist(), max_iter, False
+    except Exception as e:
+        print(f"Error en Gauss-Seidel: {e}")
+        return [0.0]*len(b), 0, False
 
 
 def sor(A, b, tol, max_iter, w):
-    n = len(b)
-    x = np.zeros(n)
+    try:
+        n = len(b)
+        x = np.zeros(n)
+        w = max(0.1, min(w, 1.9))
 
-    for k in range(max_iter):
-        x_old = x.copy()
+        for k in range(max_iter):
+            x_old = x.copy()
 
-        for i in range(n):
-            s1 = sum(A[i][j] * x[j] for j in range(i))
-            s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
-            x[i] = (1 - w) * x_old[i] + (w * (b[i] - s1 - s2) / A[i][i])
+            for i in range(n):
+                if abs(A[i][i]) < 1e-10:
+                    return [0.0]*n, k, False
+                    
+                s1 = sum(A[i][j] * x[j] for j in range(i))
+                s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
+                x[i] = (1 - w) * x_old[i] + (w * (b[i] - s1 - s2) / A[i][i])
+            
+            if not np.all(np.isfinite(x)):
+                return x_old.tolist(), k, False
+                
+            x = np.clip(x, -1e8, 1e8)
 
-        if np.linalg.norm(x - x_old, np.inf) < tol:
-            return x.tolist(), k+1, True
+            if np.linalg.norm(x - x_old, np.inf) < tol:
+                return x.tolist(), k+1, True
 
-    return x.tolist(), max_iter, False
+        return x.tolist(), max_iter, False
+    except Exception as e:
+        print(f"Error en SOR: {e}")
+        return [0.0]*len(b), 0, False
 
 
 def gradiente_conjugado(A, b, tol, max_iter):
-    x = np.zeros_like(b)
-    r = b - A @ x
-    p = r.copy()
-    rs_old = np.dot(r, r)
+    try:
+        x = np.zeros_like(b)
+        r = b - A @ x
+        p = r.copy()
+        rs_old = np.dot(r, r)
 
-    for i in range(max_iter):
-        Ap = A @ p
-        denom = np.dot(p, Ap)
+        for i in range(max_iter):
+            Ap = A @ p
+            denom = np.dot(p, Ap)
 
-        if denom == 0:
-            return x.tolist(), i, False
+            if abs(denom) < 1e-14:
+                return x.tolist(), i, False
 
-        alpha = rs_old / denom
-        x = x + alpha * p
-        r = r - alpha * Ap
+            alpha = rs_old / denom
+            x = x + alpha * p
+            r = r - alpha * Ap
 
-        rs_new = np.dot(r, r)
+            if not np.all(np.isfinite(x)):
+                return np.clip(x, -1e8, 1e8).tolist(), i, False
+            
+            x = np.clip(x, -1e8, 1e8)
 
-        if np.sqrt(rs_new) < tol:
-            return x.tolist(), i+1, True
+            rs_new = np.dot(r, r)
 
-        p = r + (rs_new / rs_old) * p
-        rs_old = rs_new
+            if np.sqrt(rs_new) < tol:
+                return x.tolist(), i+1, True
 
-    return x.tolist(), max_iter, False
+            if rs_old == 0:
+                return x.tolist(), i, False
+                
+            p = r + (rs_new / rs_old) * p
+            rs_old = rs_new
+
+        return x.tolist(), max_iter, False
+    except Exception as e:
+        print(f"Error en Gradiente Conjugado: {e}")
+        return [0.0]*len(b), 0, False
 
 
 def gradiente_conjugado_precond(A, b, tol, max_iter):
@@ -312,16 +349,38 @@ def resolver():
 
         A, b = construir_sistema(data, escenario)
         A = aplicar_escenario(A, escenario)
+        
+        # Validar matriz
+        if not np.all(np.isfinite(A)) or not np.all(np.isfinite(b)):
+            return jsonify({"error": "Matriz o vector contienen valores invalidos"}), 400
+        
+        # Limitar valores extremos en la matriz
+        A = np.clip(A, -1e6, 1e6)
+        b = np.clip(b, -1e6, 1e6)
+        
+        cond = condicion_matriz(A)
+        clasificacion, _ = clasificar_sistema(A)
+        
+        if clasificacion == "mal_condicionado" and cond and cond > 1e6:
+            try:
+                solucion = np.linalg.lstsq(A, b, rcond=None)[0]
+                res_lu = (solucion.tolist(), 1, True)
+            except:
+                res_lu = ([0.0]*len(b), 1, False)
+        else:
+            res_lu = lu(A, b)
+        
+        if not np.all(np.isfinite(res_lu[0])):
+            res_lu = ([0.0]*len(b), 1, False)
+        else:
+            res_lu = (list(np.clip(res_lu[0], -1e8, 1e8)), res_lu[1], res_lu[2])
 
         res_j = jacobi(A, b, tol, max_iter)
         res_gs = gauss_seidel(A, b, tol, max_iter)
         res_sor = sor(A, b, tol, max_iter, w)
         res_gc = gradiente_conjugado(A, b, tol, max_iter)
         res_gcp = gradiente_conjugado_precond(A, b, tol, max_iter)
-        res_lu = lu(A, b)
 
-        cond = condicion_matriz(A)
-        clasificacion, _ = clasificar_sistema(A)
         recomendacion = obtener_recomendacion(clasificacion, cond)
 
         return jsonify({

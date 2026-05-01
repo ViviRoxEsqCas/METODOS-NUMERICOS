@@ -15,7 +15,7 @@ const variables = [
     { nombre: "x₂", descripcion: "Dosis Fármaco B", unidad: "mg/día" },
     { nombre: "x₃", descripcion: "Dosis Fármaco C", unidad: "mg/día" },
     { nombre: "x₄", descripcion: "Intensidad Terapia Digital", unidad: "nivel/sesiones" },
-    { nombre: "x₅", descripcion: "Intervención IA", unidad: "nivel ajuste" }
+    { nombre: "x₅", descripcion: "Ajuste Terapéutico Adaptativo", unidad: "nivel ajuste" }
 ];
 let escenarioActual = "ideal";
 
