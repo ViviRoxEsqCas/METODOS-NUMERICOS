@@ -50,21 +50,19 @@ def aplicar_escenario(A_base, escenario):
             A[i][i] = sum(abs(A[i])) + 10
 
     elif escenario == "estres":
-        # Quitar dominancia + ruido
-        for i in range(n):
-            A[i][i] *= 0.6
+        A = A_base.copy()
 
-        ruido = np.random.normal(0, 0.3, A.shape)
-        A += ruido
+        # hacerla moderadamente mal condicionada
+        A[1] = A[0] * 0.9
+        A[2] = A[0] * 1.1
+
+        # leve reducción diagonal
+        for i in range(n):
+            A[i][i] *= 0.7
 
     elif escenario == "mal_condicionado":
-        # Filas casi dependientes → determinante ≈ 0
-        A[1] = A[0] * 0.9999
+        A[1] = A[0] * 0.999
         A[2] = A[0] * 1.0001
-
-        # Reducir diagonales para empeorar condición
-        for i in range(n):
-            A[i][i] *= 0.3
 
     return A
 
