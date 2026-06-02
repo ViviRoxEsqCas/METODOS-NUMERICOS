@@ -325,16 +325,27 @@ function renderizarUI(data) {
 
     const cond = data.analisis.numero_condicion;
     document.getElementById('val-condicion').innerText = cond.toExponential(4);
-    document.getElementById('val-clasificacion').innerText = data.analisis.clasificacion.toUpperCase();
     document.getElementById('val-simetrica').innerText = data.analisis.es_simetrica ? "SÍ" : "NO";
-    document.getElementById('val-mensaje-clinico').innerText = data.analisis.mensaje_clinico;
-
-    const parrafoTeorico = document.getElementById('texto-explicacion-condicion');
-    if(data.analisis.clasificacion === 'ideal') {
-        parrafoTeorico.innerHTML = `Al ser $\\kappa(A) \\approx ${cond.toFixed(1)}$, el sistema es bien condicionado. La matriz posee diagonal estrictamente dominante, asegurando que los métodos estacionarios (Jacobi, Gauss-Seidel) converjan velozmente al radio espectral $\\rho(T) < 1$.`;
-    } else if(data.analisis.clasificacion === 'estres') {
-        parrafoTeorico.innerHTML = `El aumento de las demandas biológicas distorsiona la dominancia diagonal. Con $\\kappa(A) \\approx ${cond.toFixed(1)}$, los errores de redondeo se propagan moderadamente, forzando a los métodos como Jacobi a requerir más iteraciones debido a un incremento en el radio espectral de la matriz de iteración.`;
+    if (escenarioActual === 'estres') {
+        document.getElementById('val-clasificacion').innerText = "ESTRÉS";
+        document.getElementById('val-mensaje-clinico').innerText = "Sistema Bajo Estrés Fisiológico: Requiere monitoreo continuo.";
     } else {
+        document.getElementById('val-clasificacion').innerText = data.analisis.clasificacion.toUpperCase();
+        document.getElementById('val-mensaje-clinico').innerText = data.analisis.mensaje_clinico;
+    }
+    const parrafoTeorico = document.getElementById('texto-explicacion-condicion');
+
+    if (escenarioActual === 'estres') {
+        parrafoTeorico.innerHTML = `<strong>Nota Clínica - Estrés:</strong> Aunque los parámetros convergen a un estado operativo, el incremento del hipermetabolismo genera una carga fisiológica notable. Con $\\kappa(A) \\approx ${cond.toFixed(1)}$, el sistema requiere una vigilancia estrecha, ya que la estabilidad es marginal y susceptible a cambios ante pequeñas variaciones en la dosificación.`;
+    } 
+    else if(data.analisis.clasificacion === 'ideal') {
+        parrafoTeorico.innerHTML = `Al ser $\\kappa(A) \\approx ${cond.toFixed(1)}$, el sistema es bien condicionado. La matriz posee diagonal estrictamente dominante, asegurando que los métodos estacionarios (Jacobi, Gauss-Seidel) converjan velozmente al radio espectral $\\rho(T) < 1$.`;
+    } 
+    else if(data.analisis.clasificacion === 'estres') {
+        // Este caso queda de respaldo si el servidor también clasifica como 'estres'
+        parrafoTeorico.innerHTML = `El aumento de las demandas biológicas distorsiona la dominancia diagonal. Con $\\kappa(A) \\approx ${cond.toFixed(1)}$, los errores de redondeo se propagan moderadamente, forzando a los métodos como Jacobi a requerir más iteraciones debido a un incremento en el radio espectral de la matriz de iteración.`;
+    } 
+    else {
         parrafoTeorico.innerHTML = `<strong>Falla de Convergencia:</strong> Con un $\\kappa(A) \\approx ${cond.toExponential(2)}$, el sistema está críticamente mal condicionado debido a la casi dependencia lineal entre las dosis de fármacos. Los métodos tradicionales divergen exponencialmente, validando que solo el <strong>GCP (Gradiente Conjugado Precondicionado)</strong> y la <strong>Factorización LU</strong> (por ser exacta) sostengan la precisión numérica en este escenario severo.`;
     }
 
