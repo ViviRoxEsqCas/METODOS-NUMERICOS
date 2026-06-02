@@ -1,328 +1,303 @@
+import os
+import math
 from flask import Flask, render_template, request, jsonify
 import numpy as np
 
 app = Flask(__name__)
 
-# =========================
-# CONSTRUCCIÓN AUTOMÁTICA DEL SISTEMA
-# =========================
+# ==============================================================================
+# 1. OPERACIONES MATRICIALES PURAS (EXIGENCIA DE RIGOR MATEMÁTICO)
+# ==============================================================================
 
-def construir_sistema(paciente_data, escenario="ideal"):
-
-    edad = float(paciente_data.get("edad", 50))
-    peso = float(paciente_data.get("peso", 70))
-    severidad = float(paciente_data.get("severidad", 5))
-    tolerancia = float(paciente_data.get("tolerancia", 5))
-    actividad = float(paciente_data.get("actividad", 5))
-
-    edad_f = edad / 50
-    peso_f = peso / 70
-    sev = severidad / 10
-    tol = tolerancia / 10
-    act = actividad / 10
-
-    A = np.array([
-        [10 + 2*edad_f, 1 + 0.3*sev, 0.5, 0.3, 0.2],
-        [0.5, 11 + 2*sev, 1, 0.5, 0.3],
-        [0.3, 0.5, 10 + 2*(1-tol), 0.8, 0.4],
-        [0.2, 0.3, 0.5, 9 + act, 0.8],
-        [0.1, 0.2, 0.3, 0.5, 8 + tol]
-    ], dtype=float)
-
-    b = np.array([
-        8 + 2*sev + 0.5*edad_f,
-        9 + 2.5*sev,
-        7 + 2*tol + 0.8*peso_f,
-        6 + 1.5*act + tol,
-        7.5 + 1.5*sev + 0.5*tol
-    ], dtype=float)
-    
-    return A, b
-
-def aplicar_escenario(A_base, escenario):
-    A = A_base.copy()
-
+def mat_vec_mul(A, x):
+    """Multiplicación pura de Matriz (n x n) por Vector (n)"""
     n = len(A)
+    res = [0.0] * n
+    for i in range(n):
+        res[i] = sum(A[i][j] * x[j] for j in range(n))
+    return res
 
-    if escenario == "ideal":
-        # FUERTEMENTE diagonal dominante
-        for i in range(n):
-            A[i][i] = sum(abs(A[i])) + 10
+def dot_product(v1, v2):
+    """Producto escalar puro entre dos vectores"""
+    return sum(v1[i] * v2[i] for i in range(len(v1)))
 
-    elif escenario == "estres":
-        A = A_base.copy()
+def norm_inf_diff(v1, v2):
+    """Norma infinito de la diferencia (para criterios de parada iterativos)"""
+    return max(abs(v1[i] - v2[i]) for i in range(len(v1)))
 
-        # Moderadamente mal condicionada
-        A[1] = A[0] * 0.9
-        A[2] = A[0] * 1.1
-
-        # leve reducción diagonal
-        for i in range(n):
-            A[i][i] *= 0.7
-
-    elif escenario == "mal_condicionado":
-        A[1] = A[0] * 0.999
-        A[2] = A[0] * 1.0001
-
-    return A
-
-# =========================
-# MÉTODOS NUMÉRICOS
-# =========================
-
-def jacobi(A, b, tol, max_iter):
-    try:
-        n = len(b)
-        x = np.zeros(n)
-        D = np.diag(A)
-        
-        if np.any(np.abs(D) < 1e-10):
-            return [0.0]*n, 0, False
-            
-        R = A - np.diagflat(D)
-
-        for k in range(max_iter):
-            x_new = (b - np.dot(R, x)) / D
-            
-            if not np.all(np.isfinite(x_new)):
-                return x.tolist(), k, False
-            
-            x_new = np.clip(x_new, -1e8, 1e8)
-
-            if np.linalg.norm(x_new - x, np.inf) < tol:
-                return x_new.tolist(), k+1, True
-
-            x = x_new
-
-        return x.tolist(), max_iter, False
-    except Exception as e:
-        print(f"Error en Jacobi: {e}")
-        return [0.0]*len(b), 0, False
-
-
-def gauss_seidel(A, b, tol, max_iter):
-    try:
-        n = len(b)
-        x = np.zeros(n)
-
-        for k in range(max_iter):
-            x_old = x.copy()
-
-            for i in range(n):
-                if abs(A[i][i]) < 1e-10:
-                    return [0.0]*n, k, False
-                    
-                s1 = sum(A[i][j] * x[j] for j in range(i))
-                s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
-                x[i] = (b[i] - s1 - s2) / A[i][i]
-            
-            if not np.all(np.isfinite(x)):
-                return x_old.tolist(), k, False
-                
-            x = np.clip(x, -1e8, 1e8)
-
-            if np.linalg.norm(x - x_old, np.inf) < tol:
-                return x.tolist(), k+1, True
-
-        return x.tolist(), max_iter, False
-    except Exception as e:
-        print(f"Error en Gauss-Seidel: {e}")
-        return [0.0]*len(b), 0, False
-
-
-def sor(A, b, tol, max_iter, w):
-    try:
-        n = len(b)
-        x = np.zeros(n)
-        w = max(0.1, min(w, 1.9))
-
-        for k in range(max_iter):
-            x_old = x.copy()
-
-            for i in range(n):
-                if abs(A[i][i]) < 1e-10:
-                    return [0.0]*n, k, False
-                    
-                s1 = sum(A[i][j] * x[j] for j in range(i))
-                s2 = sum(A[i][j] * x_old[j] for j in range(i+1, n))
-                x[i] = (1 - w) * x_old[i] + (w * (b[i] - s1 - s2) / A[i][i])
-            
-            if not np.all(np.isfinite(x)):
-                return x_old.tolist(), k, False
-                
-            x = np.clip(x, -1e8, 1e8)
-
-            if np.linalg.norm(x - x_old, np.inf) < tol:
-                return x.tolist(), k+1, True
-
-        return x.tolist(), max_iter, False
-    except Exception as e:
-        print(f"Error en SOR: {e}")
-        return [0.0]*len(b), 0, False
-
-
-def gradiente_conjugado(A, b, tol, max_iter):
-    try:
-        x = np.zeros_like(b)
-        r = b - A @ x
-        p = r.copy()
-        rs_old = np.dot(r, r)
-
-        for i in range(max_iter):
-            Ap = A @ p
-            denom = np.dot(p, Ap)
-
-            if abs(denom) < 1e-14:
-                return x.tolist(), i, False
-
-            alpha = rs_old / denom
-            x = x + alpha * p
-            r = r - alpha * Ap
-
-            if not np.all(np.isfinite(x)):
-                return np.clip(x, -1e8, 1e8).tolist(), i, False
-            
-            x = np.clip(x, -1e8, 1e8)
-
-            rs_new = np.dot(r, r)
-
-            if np.sqrt(rs_new) < tol:
-                return x.tolist(), i+1, True
-
-            if rs_old == 0:
-                return x.tolist(), i, False
-                
-            p = r + (rs_new / rs_old) * p
-            rs_old = rs_new
-
-        return x.tolist(), max_iter, False
-    except Exception as e:
-        print(f"Error en Gradiente Conjugado: {e}")
-        return [0.0]*len(b), 0, False
-
-
-def gradiente_conjugado_precond(A, b, tol, max_iter):
-    """
-    Gradiente Conjugado Precondicionado con precondicionador Jacobi.
-    """
-    n = len(b)
-    x = np.zeros(n)
-    r = b - A @ x
-    
-    # Precondicionador Jacobi: M = diag(A)
-    M = np.diag(np.diag(A))
-    try:
-        M_inv = np.linalg.inv(M)
-    except:
-        return x.tolist(), 0, False
-    
-    y = M_inv @ r
-    p = y.copy()
-    ry_old = np.dot(r, y)
-
-    for i in range(max_iter):
-        Ap = A @ p
-        denom = np.dot(p, Ap)
-
-        if abs(denom) < 1e-14:
-            return x.tolist(), i, False
-
-        alpha = ry_old / denom
-        x = x + alpha * p
-        r = r - alpha * Ap
-
-        y = M_inv @ r
-        ry_new = np.dot(r, y)
-
-        if np.sqrt(ry_new) < tol:
-            return x.tolist(), i+1, True
-
-        beta = ry_new / ry_old
-        p = y + beta * p
-        ry_old = ry_new
-
-    return x.tolist(), max_iter, False
-
-
-def lu(A, b):
-    try:
-        x = np.linalg.solve(A, b)
-        return x.tolist(), 1, True
-    except:
-        return [0.0]*len(b), 1, False
-
-# =========================
-# VALIDACIONES
-# =========================
-
-def es_diagonal_dominante(A):
-    for i in range(len(A)):
-        if abs(A[i][i]) < sum(abs(A[i][j]) for j in range(len(A)) if j != i):
-            return False
+def es_simetrica_pura(A, tol=1e-7):
+    """Verifica la simetría analítica requerida para el Gradiente Conjugado"""
+    n = len(A)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(A[i][j] - A[j][i]) > tol:
+                return False
     return True
 
-def es_simetrica(A):
-    return np.allclose(A, A.T)
+# ==============================================================================
+# 2. MODELADO CLÍNICO DE VARIABLES Y ESCENARIOS (5x5)
+# ==============================================================================
 
-def condicion_matriz(A):
+def construir_sistema_medico(paciente_data, escenario="ideal"):
+    """
+    Construye de forma determinista la matriz A y el vector b de un sistema 5x5.
+    Garantiza una estructura original Simétrica y Definida Positiva (SPD)
+    para que los métodos avanzados (GCP) converjan matemáticamente.
+    """
+    edad = float(paciente_data.get("edad", 50)) / 50.0
+    peso = float(paciente_data.get("peso", 70)) / 70.0
+    severidad = float(paciente_data.get("severidad", 5)) / 10.0
+    actividad = float(paciente_data.get("actividad", 5)) / 10.0
+
+    # Base Matricial 5x5 SPD (Interacciones farmacológicas cruzadas equilibradas)
+    A = [
+        [32.0 + 4.0*edad,  1.5,              0.8,              0.5,              0.2],
+        [1.5,              28.0 + 3.0*peso,  2.0,              0.6,              0.3],
+        [0.8,              2.0,              25.0 + 5.0*actividad, 1.0,          0.4],
+        [0.5,              0.6,              1.0,              22.0 + 2.0*severidad, 0.7],
+        [0.2,              0.3,              0.4,              0.7,              18.0]
+    ]
+
+    # Vector de demandas biológicas b (mg/día)
+    b = [
+        250.0 + 30.0 * severidad,
+        180.0 + 20.0 * peso,
+        150.0 + 40.0 * actividad,
+        100.0 + 50.0 * severidad,
+        60.0  + 10.0 * edad
+    ]
+
+    n = len(A)
+    
+    # MODIFICACIONES GEOMÉTRICAS DE ACUERDO AL ESCENARIO
+    if escenario == "estres":
+        for i in range(n):
+            b[i] *= 2.8  
+            for j in range(n):
+                if i != j:
+                    A[i][j] *= 3.8  
+                else:
+                    A[i][i] *= 0.75 
+
+    elif escenario == "mal_condicionado":
+        alpha = 0.9996
+        for j in range(n):
+            A[1][j] = A[0][j] * alpha
+        A[1][1] += 0.0008
+        b[1] = b[0] * alpha
+
+    return A, b
+
+# ==============================================================================
+# 3. MÉTODOS NUMÉRICOS PUROS CON CAPTURA DE HISTORIAL COMPLETO
+# ==============================================================================
+
+def factorizacion_lu_con_detalle(A, b):
+    """
+    Factorización LU con Pivoteo Parcial (PA = LU) que genera el desglose
+    paso a paso de las sustituciones para el informe biológico.
+    """
     try:
-        return np.linalg.cond(A)
-    except:
-        return None
+        n = len(A)
+        A_piv = [fila[:] for fila in A]
+        b_piv = list(b)
+        
+        L = [[0.0] * n for _ in range(n)]
+        U = [[0.0] * n for _ in range(n)]
+        P = list(range(n))  # Vector de permutación
+        
+        # 1. DESCOMPOSICIÓN PA = LU
+        for i in range(n):
+            max_row = i
+            max_val = abs(A_piv[i][i])
+            for r in range(i + 1, n):
+                if abs(A_piv[r][i]) > max_val:
+                    max_val = abs(A_piv[r][i])
+                    max_row = r
+            
+            if max_row != i:
+                A_piv[i], A_piv[max_row] = A_piv[max_row], A_piv[i]
+                b_piv[i], b_piv[max_row] = b_piv[max_row], b_piv[i]
+                P[i], P[max_row] = P[max_row], P[i]
+            
+            if abs(A_piv[i][i]) < 1e-14:
+                return [0.0]*n, False, L, U, [0.0]*n, [], []
+                
+            L[i][i] = 1.0
+            for k in range(i, n):
+                s = sum(L[i][j] * U[j][k] for j in range(i))
+                U[i][k] = A_piv[i][k] - s
+            for k in range(i + 1, n):
+                s = sum(L[k][j] * U[j][i] for j in range(i))
+                L[k][i] = (A_piv[k][i] - s) / U[i][i]
+        
+        # 2. SUSTITUCIÓN PROGRESIVA (Ly = Pb)
+        y = [0.0] * n
+        pasos_y = []
+        for i in range(n):
+            s = sum(L[i][j] * y[j] for j in range(i))
+            y[i] = b_piv[i] - s
+            
+            # Construir la cadena del paso matemático
+            terminos_resta = "".join([f" - ({L[i][j]:.2f} · {y[j]:.2f})" for j in range(i)])
+            pasos_y.append(f"y_{i+1} = {b_piv[i]:.2f}{terminos_resta} = <b>{y[i]:.4f}</b>")
+            
+        # 3. SUSTITUCIÓN REGRESIVA (Ux = y)
+        x = [0.0] * n
+        pasos_x = []
+        # Nombres biológicos de las variables solicitadas en el PDF
+        nombres = ["x₁ (Proteínas)", "x₂ (Lípidos)", "x₃ (Carbohidratos)", "x₄ (Intensidad T.D.)", "x₅ (Ajuste Adap.)"]
+        
+        for i in range(n - 1, -1, -1):
+            s = sum(U[i][j] * x[j] for j in range(i + 1, n))
+            x[i] = (y[i] - s) / U[i][i]
+            
+            terminos_resta = "".join([f" - ({U[i][j]:.2f} · {x[j]:.2f})" for j in range(i + 1, n)])
+            pasos_x.insert(0, f"{nombres[i]}: ({y[i]:.2f}{terminos_resta}) / {U[i][i]:.2f} = <b style='color:#2b6cb0;'>{x[i]:.4f} mg/día</b>")
+            
+        # Retornar el orden de filas final en formato de texto para el reporte
+        orden_filas = [f"Fila {p+1}" for p in P]
+        
+        return x, True, L, U, y, pasos_y, pasos_x, orden_filas
+    except Exception as e:
+        print(f"Error en LU: {e}")
+        return [0.0]*5, False, [[0.0]*5], [[0.0]*5], [0.0]*5, [], [], []
 
-# =========================
-# CLASIFICACIÓN DEL ESCENARIO
-# =========================
+def jacobi_con_historial(A, b, tol, max_iter):
+    n = len(b)
+    x = [0.0] * n
+    historial = []
+    
+    for k in range(max_iter):
+        x_new = [0.0] * n
+        for i in range(n):
+            if abs(A[i][i]) < 1e-12:
+                return x, k, False, historial
+            s = sum(A[i][j] * x[j] for j in range(n) if j != i)
+            x_new[i] = (b[i] - s) / A[i][i]
+        
+        err = norm_inf_diff(x_new, x)
+        historial.append({"k": k + 1, "x": list(x_new), "error": err})
+        
+        if err < tol:
+            return x_new, k + 1, True, historial
+        x = x_new
+        if err > 1e10:
+            break
+            
+    return x, max_iter, False, historial
 
-def clasificar_sistema(A):
-    cond = condicion_matriz(A)
 
-    if cond is None:
-        return "indeterminado", cond
+def gauss_seidel_con_historial(A, b, tol, max_iter):
+    n = len(b)
+    x = [0.0] * n
+    historial = []
+    
+    for k in range(max_iter):
+        x_old = list(x)
+        for i in range(n):
+            if abs(A[i][i]) < 1e-12:
+                return x, k, False, historial
+            s1 = sum(A[i][j] * x[j] for j in range(i))
+            s2 = sum(A[i][j] * x_old[j] for j in range(i + 1, n))
+            x[i] = (b[i] - s1 - s2) / A[i][i]
+            
+        err = norm_inf_diff(x, x_old)
+        historial.append({"k": k + 1, "x": list(x), "error": err})
+        
+        if err < tol:
+            return x, k + 1, True, historial
+        if err > 1e10:
+            break
+            
+    return x, max_iter, False, historial
 
-    if cond < 10:
-        return "ideal", cond
-    elif cond < 1000:
-        return "estres", cond
-    else:
-        return "mal_condicionado", cond
 
-def obtener_recomendacion(clasificacion, condicion):
-    """
-    Proporciona recomendaciones según el estado del sistema.
-    """
-    if clasificacion == "ideal":
-        return {
-            "estado": "✓ SISTEMA ÓPTIMO",
-            "color": "success",
-            "mensaje": "El sistema está bien condicionado. La solución es estable y confiable.",
-            "accion": "Puede aplicarse el tratamiento con confianza."
-        }
-    elif clasificacion == "estres":
-        return {
-            "estado": "⚠ SISTEMA BAJO ESTRÉS",
-            "color": "warning",
-            "mensaje": f"El sistema presenta estrés numérico (número de condición: {condicion:.2f}). Pequeños cambios en parámetros pueden afectar significativamente la solución.",
-            "accion": "Se recomienda monitoreo frecuente y posibles ajustes dinámicos del tratamiento."
-        }
-    elif clasificacion == "mal_condicionado":
-        return {
-            "estado": "✗ SISTEMA MAL CONDICIONADO",
-            "color": "danger",
-            "mensaje": f"El sistema está mal condicionado (número de condición: {condicion:.2f}). La solución es muy sensible a variaciones en parámetros.",
-            "accion": "Se requiere validación adicional y monitoreo intensivo. Considere revisar los parámetros del paciente."
-        }
-    else:
-        return {
-            "estado": "? INDETERMINADO",
-            "color": "secondary",
-            "mensaje": "No se pudo determinar el estado del sistema.",
-            "accion": "Revise los datos del paciente."
-        }
+def sor_con_historial(A, b, tol, max_iter, w):
+    n = len(b)
+    x = [0.0] * n
+    historial = []
+    
+    for k in range(max_iter):
+        x_old = list(x)
+        for i in range(n):
+            if abs(A[i][i]) < 1e-12:
+                return x, k, False, historial
+            s1 = sum(A[i][j] * x[j] for j in range(i))
+            s2 = sum(A[i][j] * x_old[j] for j in range(i + 1, n))
+            x_gs = (b[i] - s1 - s2) / A[i][i]
+            x[i] = (1.0 - w) * x_old[i] + w * x_gs
+            
+        err = norm_inf_diff(x, x_old)
+        historial.append({"k": k + 1, "x": list(x), "error": err})
+        
+        if err < tol:
+            return x, k + 1, True, historial
+        if err > 1e10:
+            break
+            
+    return x, max_iter, False, historial
 
-# =========================
-# RUTAS
-# =========================
+
+def gradiente_conjugado_precond_con_historial(A, b, tol, max_iter):
+    n = len(b)
+    x = [0.0] * n
+    historial = []
+    
+    Ax = mat_vec_mul(A, x)
+    r = [b[i] - Ax[i] for i in range(n)]
+    
+    M_inv = []
+    for i in range(n):
+        if abs(A[i][i]) < 1e-12:
+            return x, 0, False, historial
+        M_inv.append(1.0 / A[i][i])
+        
+    y_vec = [M_inv[i] * r[i] for i in range(n)]
+    p = list(y_vec)
+    ry_old = dot_product(r, y_vec)
+
+    for k in range(max_iter):
+        Ap = mat_vec_mul(A, p)
+        denom = dot_product(p, Ap)
+
+        if abs(denom) < 1e-14:
+            return x, k, False, historial
+
+        alpha = ry_old / denom
+        x = [x[i] + alpha * p[i] for i in range(n)]
+        r = [r[i] - alpha * Ap[i] for i in range(n)]
+
+        err = math.sqrt(dot_product(r, r))
+        historial.append({"k": k + 1, "x": list(x), "error": err})
+
+        if err < tol:
+            return x, k + 1, True, historial
+
+        y_vec = [M_inv[i] * r[i] for i in range(n)]
+        ry_new = dot_product(r, y_vec)
+
+        beta = ry_new / ry_old
+        p = [y_vec[i] + beta * p[i] for i in range(n)]
+        ry_old = ry_new
+        
+        if err > 1e10:
+            break
+
+    return x, max_iter, False, historial
+
+# ==============================================================================
+# 4. EXTRACCIÓN REDUCIDA PARA INNOVACIÓN GEOMÉTRICA (3x3)
+# ==============================================================================
+
+def generar_datos_planos_3d(A, b):
+    A_33 = [fila[:3] for fila in A[:3]]
+    b_33 = b[:3]
+    return {"matrix_33": A_33, "vector_33": b_33}
+
+# ==============================================================================
+# 5. RUTAS CONTROLADORAS (API FLASK)
+# ==============================================================================
 
 @app.route("/")
 def index():
@@ -335,89 +310,84 @@ def resolver():
         escenario = data.get("escenario", "ideal")
 
         tol = 1e-6
-        max_iter = 100
-        w = 1.5
+        max_iter = 250
+        w = 1.3  
 
-        A, b = construir_sistema(data, escenario)
-        A = aplicar_escenario(A, escenario)
+        # Construcción real del sistema determinista de acuerdo al escenario clínico
+        A, b = construir_sistema_medico(data, escenario)
         
-        # Validar matriz
-        if not np.all(np.isfinite(A)) or not np.all(np.isfinite(b)):
-            return jsonify({"error": "Matriz o vector contienen valores invalidos"}), 400
-        
-        # Limitar valores extremos en la matriz
-        A = np.clip(A, -1e6, 1e6)
-        b = np.clip(b, -1e6, 1e6)
-        
-        cond = condicion_matriz(A)
+        condicion = float(np.linalg.cond(A))
+        simetrica = es_simetrica_pura(A)
 
-        if cond is None or not np.isfinite(cond):
-            cond = 1e12  # forzar mal condicionado
-
-        clasificacion, _ = clasificar_sistema(A)
-                
-        if clasificacion == "mal_condicionado" and cond and cond > 1e6:
-            try:
-                solucion = np.linalg.lstsq(A, b, rcond=None)[0]
-                res_lu = (solucion.tolist(), 1, True)
-            except:
-                res_lu = ([0.0]*len(b), 1, False)
+        if condicion < 35:
+            clasif = "ideal"
+            msg = "Sistema Estable (Óptimo): Baja sensibilidad clínica."
+        elif condicion < 1000:
+            clasif = "estres"
+            msg = "Sistema bajo Estrés Crítico: Monitorear oscilaciones dinámicas."
         else:
-            try:
-                res_lu = lu(A, b)
-            except:
-                solucion = np.linalg.lstsq(A, b, rcond=None)[0]
-                res_lu = (solucion.tolist(), 1, True)
+            clasif = "mal_condicionado"
+            msg = "Sistema Mal Condicionado: Peligro de divergencia por colinealidad."
+
+        # ==============================================================================
+        # EJECUCIÓN DE LOS ALGORITMOS NUMÉRICOS (ACTUALIZADO A 8 VARIABLES)
+        # ==============================================================================
+        # Aquí expandimos el desempaque para recibir los pasos de texto y la permutación
+        sol_lu, ok_lu, mat_L, mat_U, vec_y, pasos_y, pasos_x, orden_filas = factorizacion_lu_con_detalle(A, b)
         
-        if not np.all(np.isfinite(res_lu[0])):
-            res_lu = ([0.0]*len(b), 1, False)
-        else:
-            res_lu = (list(np.clip(res_lu[0], -1e8, 1e8)), res_lu[1], res_lu[2])
+        # Los métodos iterativos se quedan exactamente igual
+        sol_j, iter_j, ok_j, hist_j = jacobi_con_historial(A, b, tol, max_iter)
+        sol_gs, iter_gs, ok_gs, hist_gs = gauss_seidel_con_historial(A, b, tol, max_iter)
+        sol_sor, iter_sor, ok_sor, hist_sor = sor_con_historial(A, b, tol, max_iter, w)
+        sol_gcp, iter_gcp, ok_gcp, hist_gcp = gradiente_conjugado_precond_con_historial(A, b, tol, max_iter)
 
-        res_j = jacobi(A, b, tol, max_iter)
-        res_gs = gauss_seidel(A, b, tol, max_iter)
-        res_sor = sor(A, b, tol, max_iter, w)
-        res_gc = gradiente_conjugado(A, b, tol, max_iter)
-        res_gcp = gradiente_conjugado_precond(A, b, tol, max_iter)
+        datos_geometria_3d = generar_datos_planos_3d(A, b)
 
-        recomendacion = obtener_recomendacion(clasificacion, cond)
-        A = np.nan_to_num(A, nan=0.0, posinf=1e6, neginf=-1e6)
-        b = np.nan_to_num(b, nan=0.0, posinf=1e6, neginf=-1e6)
-        # Generar y devolver respuesta
+        # ==============================================================================
+        # CONSTRUCCIÓN DE LA RESPUESTA JSON
+        # ==============================================================================
         return jsonify({
-            "paciente": data,
-            "matriz_A": A.tolist(),
-            "vector_b": b.tolist(),
             "analisis": {
                 "escenario": escenario,
-                "condicion": float(cond) if cond else None,
-                "clasificacion": clasificacion,
-                "diagonal_dominante": es_diagonal_dominante(A),
-                "simetrica": es_simetrica(A),
-                "recomendacion": recomendacion
+                "numero_condicion": condicion,
+                "clasificacion": clasif,
+                "es_simetrica": simetrica,
+                "mensaje_clinico": msg
             },
-            "solucion": {
-                "valores": res_lu[0],
-                "metodo": "Factorización LU",
-                "unidades": ["mg/día"]*5
+            "sistema_original": {
+                "matriz_a": A,
+                "vector_b": b
             },
-            "metodos": {
-                "jacobi": res_j,
-                "gauss_seidel": res_gs,
-                "sor": res_sor,
-                "gradiente_conjugado": res_gc,
-                "gradiente_conjugado_precond": res_gcp,
-                "lu": res_lu
-            }
+            "solucion_principal": {
+                "valores": sol_lu if ok_lu else [0.0]*5,
+                "metodo_base": "Factorización LU"
+            },
+            "cuadro_comparativo": {
+                "jacobi": {"iteraciones": iter_j, "convergencia": "S" if ok_j else "N"},
+                "gauss_seidel": {"iteraciones": iter_gs, "convergencia": "S" if ok_gs else "N"},
+                "sor": {"iteraciones": iter_sor, "convergencia": "S" if ok_sor else "N"},
+                "gradiente_conjugado_precond": {"iteraciones": iter_gcp, "convergencia": "S" if ok_gcp else "N"},
+                "lu": {"iteraciones": 1, "convergencia": "S" if ok_lu else "N"}
+            },
+            "historial_pasos": {
+                "jacobi": hist_j,
+                "gauss_seidel": hist_gs,
+                "sor": hist_sor,
+                "gradiente_conjugado_precond": hist_gcp
+            },
+            "detalle_lu": {
+                "matriz_l": mat_L,
+                "matriz_u": mat_U,
+                "vector_y": vec_y,
+                "pasos_forward": pasos_y,     # <-- Enviado al JS para la sustitución hacia adelante
+                "pasos_backward": pasos_x,    # <-- Enviado al JS para la sustitución hacia atrás
+                "permutacion": orden_filas    # <-- Enviado al JS para ver el pivoteo de filas
+            },
+            "visualizacion_planos_3d": datos_geometria_3d
         })
-
     except Exception as e:
-        print("ERROR EN /resolver:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# =========================
-
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)

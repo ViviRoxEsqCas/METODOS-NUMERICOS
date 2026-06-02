@@ -2,217 +2,564 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Sistema Clínico Inteligente</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Clínico Multivariable - UMSA</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 
-<div class="watermark">Vivian Roxana Esquivel Castillo</div>
+<div class="watermark">Vivian Roxana Esquivel Castillo - Métodos Numéricos</div>
 
 <div class="container">
 
     <header>
-        <h1>Sistema Inteligente de Optimización Terapéutica Personalizada</h1>
-        <p>Resolución automática mediante métodos numéricos con visualización del sistema de ecuaciones</p>
+        <h1>Sistema Multivariable de Optimización Terapéutica Personalizada</h1>
+        <p class="subtitle">Modelado Analítico de Dosificación Óptima mediante Métodos Numéricos</p>
     </header>
-    <div class="sidebar">
-        <button onclick="cambiarEscenario(event, 'ideal')" class="active">Ideal</button>
-        <button onclick="cambiarEscenario(event, 'estres')">Estrés</button>
-        <button onclick="cambiarEscenario(event, 'mal_condicionado')">Mal Condicionado</button>
+
+    <div class="sidebar-scenarios">
+        <label class="scenario-label">Seleccione el Escenario Fisiológico:</label>
+        <div class="btn-group-scenarios">
+            <button onclick="cambiarEscenario(event, 'ideal')" class="btn-scenario active" id="btn-ideal">
+                <i class="fas fa-check-circle"></i> Caso Ideal (Estable)
+            </button>
+            <button onclick="cambiarEscenario(event, 'estres')" class="btn-scenario" id="btn-estres">
+                <i class="fas fa-exclamation-triangle"></i> Bajo Estrés (Hipermetabolismo)
+            </button>
+            <button onclick="cambiarEscenario(event, 'mal_condicionado')" class="btn-scenario" id="btn-mal">
+                <i class="fas fa-biohazard"></i> Mal Condicionado (Falla Multiorgánica)
+            </button>
+        </div>
     </div>
-    <!-- FORMULARIO DE DATOS DEL PACIENTE -->
+
     <section class="panel">
-        <h2>Datos del Paciente</h2>
-        <p style="font-size: 0.9em; color: #666;">Ingrese los parámetros del paciente para calcular la dosificación óptima:</p>
+        <h2>1. Parámetros Fisiológicos del Paciente</h2>
+        <p class="panel-desc">Los valores de entrada modifican dinámicamente el comportamiento de los coeficientes de la matriz lineal.</p>
         
-        <div class="patient-form">
+        <div class="patient-grid-form">
             <div class="form-group">
-                <label for="edad">Edad (años):</label>
-                <input type="number" id="edad" name="edad" value="50" min="1" max="120" step="1">
+                <label for="edad">Edad del paciente (Años):</label>
+                <input type="number" id="edad" value="50" min="1" max="120" step="1">
             </div>
 
             <div class="form-group">
-                <label for="peso">Peso (kg):</label>
-                <input type="number" id="peso" name="peso" value="70" min="20" max="200" step="0.5">
+                <label for="peso">Peso Corporal (kg):</label>
+                <input type="number" id="peso" value="70" min="20" max="200" step="0.5">
             </div>
 
             <div class="form-group">
-                <label for="severidad">Severidad de síntomas (1-10):</label>
-                <div class="slider-container">
-                    <input type="range" id="severidad" name="severidad" value="5" min="1" max="10" step="1">
-                    <span id="severidad-value">5</span>
+                <label for="severidad">Severidad Sintomatológica (1-10):</label>
+                <div class="slider-wrapper">
+                    <input type="range" id="severidad" value="5" min="1" max="10" step="1" oninput="actualizarSlider('severidad')">
+                    <span id="severidad-value" class="badge">5</span>
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="tolerancia">Tolerancia a medicamentos (1-10):</label>
-                <div class="slider-container">
-                    <input type="range" id="tolerancia" name="tolerancia" value="5" min="1" max="10" step="1">
-                    <span id="tolerancia-value">5</span>
+                <label for="actividad">Nivel de Actividad Física (1-10):</label>
+                <div class="slider-wrapper">
+                    <input type="range" id="actividad" value="5" min="1" max="10" step="1" oninput="actualizarSlider('actividad')">
+                    <span id="actividad-value" class="badge">5</span>
                 </div>
             </div>
-
-            <div class="form-group">
-                <label for="actividad">Nivel de actividad física (1-10):</label>
-                <div class="slider-container">
-                    <input type="range" id="actividad" name="actividad" value="5" min="1" max="10" step="1">
-                    <span id="actividad-value">5</span>
-                </div>
-            </div>
-
-            <button onclick="calcularDosificacion()" class="btn-primary">Calcular Dosificación Óptima</button>
+        </div>
+        
+        <div class="center-actions">
+            <button onclick="calcularDosificacion()" class="btn-trigger-solve">Construir y Resolver Sistema Matemático</button>
         </div>
     </section>
 
-    <!-- VISUALIZACIÓN DEL SISTEMA DE ECUACIONES + 3D/2D -->
-    <div class="equations-visualization-wrapper">
+    <div id="diagnosis-container" class="panel diagnosis-panel" style="display: none;">
+        <h2>2. Diagnóstico y Estabilidad del Sistema Lineal</h2>
+        <div class="diagnostic-grid">
+            <div class="diag-card">
+                <span class="diag-title"><i class="fas fa-calculator"></i> Número de Condición $\kappa(A)$:</span>
+                <span id="val-condicion" class="diag-value">--</span>
+            </div>
+            <div class="diag-card">
+                <span class="diag-title"><i class="fas fa-project-diagram"></i> Clasificación Estructural:</span>
+                <span id="val-clasificacion" class="diag-value">--</span>
+            </div>
+            <div class="diag-card">
+                <span class="diag-title"><i class="fas fa-balance-scale"></i> Matriz Simétrica:</span>
+                <span id="val-simetrica" class="diag-value">--</span>
+            </div>
+        </div>
+        <p id="val-mensaje-clinico" class="clinical-alert"></p>
         
-        <section class="panel sistema-panel" id="sistema-section" style="display: none;">
-            <div class="sistema-header">
-                <h2>Sistema de Ecuaciones Generado (Ax = b)</h2>
-                <button onclick="toggleVisualizacion3D()" class="btn-visualize" title="Ver visualización 3D">
-                    <span class="icon-3d">📊</span>
-                    <span>Visualización 3D</span>
-                </button>
-            </div>
-            
-            <p style="font-size: 0.9em; color: #666;">El sistema automáticamente generado basado en los parámetros del paciente:</p>
-            
-            <div class="ecuaciones-container">
-                <div class="matriz-container">
-                    <h3>Matriz A (5×5) - Coeficientes</h3>
-                    <div id="matriz-a" class="matriz"></div>
-                </div>
-
-                <div class="operador">×</div>
-
-                <div class="vector-container">
-                    <h3>Vector x (5×1) - Incógnitas</h3>
-                    <div id="vector-x" class="vector"></div>
-                </div>
-
-                <div class="operador">=</div>
-
-                <div class="vector-container">
-                    <h3>Vector b (5×1) - Objetivos</h3>
-                    <div id="vector-b" class="vector"></div>
-                </div>
-            </div>
-
-            <div style="margin-top: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-                <p style="margin: 0; font-size: 0.9em; color: #555;">
-                    <strong>Nota:</strong> La matriz A es <span id="prop-diagonal" style="color: #27ae60;">diagonal dominante</span>, 
-                    lo que garantiza convergencia de métodos iterativos. 
-                    El vector b se ajusta automáticamente según los parámetros del paciente.
-                </p>
-            </div>
-        </section>
-
-
-        <div id="viz-modal" class="visualization-modal" style="display: none;">
-            <div class="visualization-container">
-                <div class="viz-header">
-                    <h2>Visualización de Espacios - Sistema de Ecuaciones</h2>
-                    <button onclick="closeVisualizacion3D()" class="btn-close">✕</button>
-                </div>
-                
-                <div class="viz-controls">
-                    <div class="viz-control-group">
-                        <label class="viz-control-label">Eje X</label>
-                        <select id="viz-axis-x" class="viz-control-select" onchange="actualizarEjes()">
-                            <option value="0">x₁ - Dosis Fármaco A</option>
-                            <option value="1">x₂ - Dosis Fármaco B</option>
-                            <option value="2">x₃ - Dosis Fármaco C</option>
-                            <option value="3">x₄ - Terapia Digital</option>
-                            <option value="4">x₅ - Intervención IA</option>
-                        </select>
-                    </div>
-                    <div class="viz-control-group">
-                        <label class="viz-control-label">Eje Y</label>
-                        <select id="viz-axis-y" class="viz-control-select" onchange="actualizarEjes()">
-                            <option value="0">x₁ - Dosis Fármaco A</option>
-                            <option value="1" selected>x₂ - Dosis Fármaco B</option>
-                            <option value="2">x₃ - Dosis Fármaco C</option>
-                            <option value="3">x₄ - Terapia Digital</option>
-                            <option value="4">x₅ - Intervención IA</option>
-                        </select>
-                    </div>
-                    <div class="viz-control-group">
-                        <label class="viz-control-label">Eje Z (3D)</label>
-                        <select id="viz-axis-z" class="viz-control-select" onchange="actualizarEjes()">
-                            <option value="0">x₁ - Dosis Fármaco A</option>
-                            <option value="1">x₂ - Dosis Fármaco B</option>
-                            <option value="2" selected>x₃ - Dosis Fármaco C</option>
-                            <option value="3">x₄ - Terapia Digital</option>
-                            <option value="4">x₅ - Intervención IA</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="viz-tabs">
-                    <button onclick="switchVizTab('3d')" class="viz-tab-btn active" data-tab="3d">📐 Espacio 3D</button>
-                    <button onclick="switchVizTab('2d')" class="viz-tab-btn" data-tab="2d">📊 Proyección 2D</button>
-                </div>
-
-                <div class="viz-content">
-                    <div id="viz-3d" class="viz-tab-content active">
-                        <div id="warning-3d" style="display:none;"></div>
-                        <div class="canvas-info">
-                            <p>Ecuaciones en el espacio 3D</p>
-                            <small>Usa el ratón para rotar • Scroll para zoom</small>
-                        </div>
-                        <canvas id="canvas-3d" class="visualization-canvas"></canvas>
-                        <div class="legend-3d" id="legend-3d"></div>
-                    </div>
-                    
-                    <div id="viz-2d" class="viz-tab-content">
-                        <div id="warning-2d" style="display:none;"></div>
-                        <div class="canvas-info">
-                            <p id="canvas-2d-title">Proyección 2D: Análisis Bivariado</p>
-                        </div>
-                        <canvas id="canvas-2d" class="visualization-canvas"></canvas>
-                        <div class="legend-2d" id="legend-2d"></div>
-                    </div>
-                </div>
-            </div>
+        <div id="analisis-teorico-condicion" class="math-theory-box" style="background: #fffaf0; padding: 12px; border-radius: 6px; margin-top: 15px; border-left: 4px solid #dd6b20; font-size: 0.9rem;">
+            <strong>Interpretación del Condicionamiento Clínico:</strong>
+            <p id="texto-explicacion-condicion"></p>
         </div>
     </div>
 
-    <!-- DIAGNÓSTICO DEL SISTEMA -->
-    <div id="diagnosis-container"></div>
-
-    <!-- SOLUCIONES POR MÉTODO -->
-    <section class="panel result" id="results-section" style="display: none;">
-        <h2>✓ Solución: Dosificación Óptima Recomendada</h2>
+    <section class="panel sistema-panel" id="sistema-section" style="display: none;">
+        <div class="sistema-header">
+            <h2>3. Representación Estructural del Modelo Matricial ($Ax = b$)</h2>
+        </div>
         
-        <div id="solution-main" class="solution-main"></div>
+        <div class="ecuaciones-block-wrapper">
+            <div class="matrix-box">
+                <h3>Matriz Coeficientes $A$ (5×5)</h3>
+                <div id="wrapper-matriz-a" class="matrix-render" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px;"></div>
+            </div>
 
-        <!-- COMPARACIÓN DE MÉTODOS NUMÉRICOS -->
-        <div style="margin-top: 40px; border-top: 2px solid #e0e0e0; padding-top: 30px;">
-            <h2>Análisis Comparativo de Métodos Numéricos</h2>
-            <p style="color: #666; margin-bottom: 20px;">Comparación de los 5 métodos implementados:</p>
+            <div class="math-operator">×</div>
 
-            <div class="methods-grid">
-                <div id="metodo-jacobi" class="method-card"></div>
-                <div id="metodo-gauss_seidel" class="method-card"></div>
-                <div id="metodo-sor" class="method-card"></div>
-                <div id="metodo-gradiente_conjugado" class="method-card"></div>
-                <div id="metodo-gradiente_conjugado_precond" class="method-card"></div>
-                <div id="metodo-lu" class="method-card"></div>
+            <div class="matrix-box vector-box">
+                <h3>Variables $x$</h3>
+                <div id="wrapper-vector-x" class="vector-render">
+                    <div class="vec-cell" title="Dosis de Fármaco A">$x_1$</div>
+                    <div class="vec-cell" title="Dosis de Fármaco B">$x_2$</div>
+                    <div class="vec-cell" title="Dosis de Fármaco C">$x_3$</div>
+                    <div class="vec-cell" title="Intensidad Terapia Digital">$x_4$</div>
+                    <div class="vec-cell" title="Ajuste Terapéutico Adaptativo">$x_5$</div>
+                </div>
+            </div>
+
+            <div class="math-operator">=</div>
+
+            <div class="matrix-box vector-box">
+                <h3>Términos $b$</h3>
+                <div id="wrapper-vector-b" class="vector-render"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel" id="visualizacion-3d-section" style="display: none;">
+        <h2>4. Análisis Geométrico de Hiperplanos Subespacio ($3 \times 3$)</h2>
+        <p class="panel-desc">Visualización geométrica tridimensional de las variables primarias ($x_1, x_2, x_3$). El marcador esférico representa el punto exacto de la solución calculada.</p>
+        <div class="chart-wrapper">
+            <div id="plotly-planes-3d" style="width:100%; height:550px;"></div>
+        </div>
+    </section>
+
+    <section class="panel result" id="results-section" style="display: none;">
+        <h2>5. Resultados de Dosificación y Métricas de Convergencia</h2>
+        
+        <div class="solucion-destacada">
+            <h3>Dosificación Óptima Calculada (F. LU Exacta):</h3>
+            <div id="solucion-valores-lista" class="vector-solucion-grid"></div>
+        </div>
+
+        <div class="tabla-evaluacion-wrapper">
+            <h3>Cuadro Comparativo de Eficiencia (Tolerancia $10^{-6}$)</h3>
+            <table class="tabla-umsa">
+                <thead>
+                    <tr>
+                        <th>Método Numérico</th>
+                        <th>Iteraciones Ejecutadas</th>
+                        <th>Convergencia Alcanzada (S/N)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr id="row-jacobi"><td>Jacobi</td><td class="iter">--</td><td class="conv">--</td></tr>
+                    <tr id="row-gs"><td>Gauss-Seidel</td><td class="iter">--</td><td class="conv">--</td></tr>
+                    <tr id="row-sor"><td>SOR ($\omega = 1.3$)</td><td class="iter">--</td><td class="conv">--</td></tr>
+                    <tr id="row-gcp"><td>Gradiente Conjugado Precondicionado (GCP)</td><td class="iter">--</td><td class="conv">--</td></tr>
+                    <tr id="row-lu"><td>Factorización LU</td><td class="iter">1</td><td class="conv">S</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel analytical-depth" id="detail-analysis-section" style="display: none; margin-top: 25px;">
+        <h2>6. Desglose Algorítmico e Historial Completo de Convergencia</h2>
+        <p class="panel-desc">Examen pormenorizado del comportamiento de cada vector iterativo $x^{(k)}$ y su descenso de error residual.</p>
+        
+        <div class="analytical-tabs-control" style="display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+            <button class="tab-btn active" onclick="switchMethodTab(event, 'tab-jacobi')">Jacobi</button>
+            <button class="tab-btn" onclick="switchMethodTab(event, 'tab-gs')">Gauss-Seidel</button>
+            <button class="tab-btn" onclick="switchMethodTab(event, 'tab-sor')">SOR</button>
+            <button class="tab-btn" onclick="switchMethodTab(event, 'tab-gcp')">GCP (Prof. Suñagua)</button>
+            <button class="tab-btn" onclick="switchMethodTab(event, 'tab-lu')">Factorización LU</button>
+        </div>
+
+        <div id="tab-jacobi" class="method-tab-content active-content">
+            <div class="math-theory-box" style="background: #f7fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4a5568;">
+                <h4>Formulación Teórica Estacionaria:</h4>
+                <p>Ecuación explícita de descomposición iterativa donde $x_i^{(k+1)} = \frac{1}{a_{ii}} \left( b_i - \sum_{j \neq i} a_{ij} x_j^{(k)} \right)$:</p>
+                $$\mathbf{x}^{(k+1)} = D^{-1}(L+U)\mathbf{x}^{(k)} + D^{-1}\mathbf{b}$$
+            </div>
+            <div class="table-scroll-wrapper" style="max-height: 300px; overflow-y: auto;">
+                <table class="tabla-umsa steps-table">
+                    <thead><tr><th>Iter ($k$)</th><th>$x_1$</th><th>$x_2$</th><th>$x_3$</th><th>$x_4$</th><th>$x_5$</th><th>Error $||e||_\infty$</th></tr></thead>
+                    <tbody id="tbody-steps-jacobi"></tbody>
+                </table>
             </div>
         </div>
 
-        <!-- DETALLES TÉCNICOS -->
-        <div style="margin-top: 30px; border-top: 2px solid #e0e0e0; padding-top: 20px;">
-            <h3>Detalles Técnicos</h3>
-            <div id="technical-details" class="technical-details"></div>
+        <div id="tab-gs" class="method-tab-content" style="display:none;">
+            <div class="math-theory-box" style="background: #f7fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #3182ce;">
+                <h4>Convergencia por Sustitución Sucesiva:</h4>
+                <p>Utiliza inmediatamente las actualizaciones de componentes calculadas en el paso actual:</p>
+                $$\mathbf{x}^{(k+1)} = (D-L)^{-1}U\mathbf{x}^{(k)} + (D-L)^{-1}\mathbf{b}$$
+            </div>
+            <div class="table-scroll-wrapper" style="max-height: 300px; overflow-y: auto;">
+                <table class="tabla-umsa steps-table">
+                    <thead><tr><th>Iter ($k$)</th><th>$x_1$</th><th>$x_2$</th><th>$x_3$</th><th>$x_4$</th><th>$x_5$</th><th>Error $||e||_\infty$</th></tr></thead>
+                    <tbody id="tbody-steps-gs"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-sor" class="method-tab-content" style="display:none;">
+            <div class="math-theory-box" style="background: #f7fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #dd6b20;">
+                <h4>Aceleración Extrapolada (SOR):</h4>
+                <p>Factor de relajación óptimo $\omega = 1.3$ aplicado a la corrección lineal de Gauss-Seidel:</p>
+                $$\mathbf{x}^{(k+1)} = (D-\omega L)^{-1}[(1-\omega)D + \omega U]\mathbf{x}^{(k)} + \omega(D-\omega L)^{-1}\mathbf{b}$$
+            </div>
+            <div class="table-scroll-wrapper" style="max-height: 300px; overflow-y: auto;">
+                <table class="tabla-umsa steps-table">
+                    <thead><tr><th>Iter ($k$)</th><th>$x_1$</th><th>$x_2$</th><th>$x_3$</th><th>$x_4$</th><th>$x_5$</th><th>Error $||e||_\infty$</th></tr></thead>
+                    <tbody id="tbody-steps-sor"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-gcp" class="method-tab-content" style="display:none;">
+            <div class="math-theory-box" style="background: #f7fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #319795;">
+                <h4>Gradiente Conjugado Precondicionado (Algoritmo de Optimización Cuadrática):</h4>
+                <p>Basado en el enfoque analítico publicado por el Instituto de Investigación Matemática de la UMSA para corregir el mal condicionamiento estructural:</p>
+                <p style="font-size: 0.9rem; color: #2d3748;">$\mathbf{r}^{(k)} = \mathbf{b} - A\mathbf{x}^{(k)}, \quad M\mathbf{z}^{(k)} = \mathbf{r}^{(k)}, \quad \alpha_k = \frac{\langle \mathbf{r}^{(k)}, \mathbf{z}^{(k)} \rangle}{\langle A\mathbf{p}^{(k)}, \mathbf{p}^{(k)} \rangle}$</p>
+            </div>
+            <div class="table-scroll-wrapper" style="max-height: 300px; overflow-y: auto;">
+                <table class="tabla-umsa steps-table">
+                    <thead><tr><th>Iter ($k$)</th><th>$x_1$</th><th>$x_2$</th><th>$x_3$</th><th>$x_4$</th><th>$x_5$</th><th>Error $||e||_\infty$</th></tr></thead>
+                    <tbody id="tbody-steps-gcp"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-lu" class="method-tab-content" style="display:none;">
+            <div class="math-theory-box" style="background: #f7fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #6b46c1;">
+                <h4>Algoritmo de Descomposición Directa (Doolittle):</h4>
+                <p>Descompone la matriz original en $A = LU$. Resuelve $Ly = b$ mediante sustitución progresiva, y posteriormente $Ux = y$ vía sustitución regresiva:</p>
+                $$\mathbf{A} = \mathbf{L}\mathbf{U}$$
+            </div>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-around;">
+                <div style="flex: 1; min-width: 280px;">
+                    <h5 style="margin-bottom: 8px; color: #553c9a;"><i class="fas fa-th"></i> Matriz Inferior L</h5>
+                    <div id="wrapper-det-l" class="matrix-render" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px;"></div>
+                </div>
+                <div style="flex: 1; min-width: 280px;">
+                    <h5 style="margin-bottom: 8px; color: #553c9a;"><i class="fas fa-th"></i> Matriz Superior U</h5>
+                    <div id="wrapper-det-u" class="matrix-render" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px;"></div>
+                </div>
+            </div>
+            <div style="margin-top: 15px; margin-bottom: 20px;">
+                <h5 style="color: #2c5282;"><i class="fas fa-arrow-right"></i> Vector Intermedio obtenido ($y$ de $Ly = b$):</h5>
+                <div id="wrapper-det-y" style="display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; width: 100%;"></div>
+            </div>
+            
+            <div id="bloque-demostracion-lu"></div>
         </div>
     </section>
 
 </div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/visualization-enhanced.js') }}"></script>
+<script>
+let escenarioActual = 'ideal';
+
+function actualizarSlider(id) {
+    document.getElementById(`${id}-value`).innerText = document.getElementById(id).value;
+}
+
+function cambiarEscenario(event, tipo) {
+    document.querySelectorAll('.btn-scenario').forEach(b => b.classList.remove('active'));
+    const boton = event.target.closest('.btn-scenario');
+    if (boton) boton.classList.add('active');
+    
+    escenarioActual = tipo;
+    calcularDosificacion();
+}
+
+function switchMethodTab(event, tabId) {
+    document.querySelectorAll('.method-tab-content').forEach(c => c.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById(tabId).style.display = 'block';
+    event.currentTarget.classList.add('active');
+}
+
+function calcularDosificacion() {
+    const payload = {
+        edad: document.getElementById('edad').value,
+        peso: document.getElementById('peso').value,
+        severidad: document.getElementById('severidad').value,
+        actividad: document.getElementById('actividad').value,
+        escenario: escenarioActual
+    };
+
+    fetch('/resolver', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) return alert("Error: " + data.error);
+        renderizarUI(data);
+    });
+}
+
+function renderizarUI(data) {
+    document.getElementById('diagnosis-container').style.display = 'block';
+    document.getElementById('sistema-section').style.display = 'block';
+    document.getElementById('visualizacion-3d-section').style.display = 'block';
+    document.getElementById('results-section').style.display = 'block';
+    document.getElementById('detail-analysis-section').style.display = 'block';
+
+    const cond = data.analisis.numero_condicion;
+    document.getElementById('val-condicion').innerText = cond.toExponential(4);
+    document.getElementById('val-clasificacion').innerText = data.analisis.clasificacion.toUpperCase();
+    document.getElementById('val-simetrica').innerText = data.analisis.es_simetrica ? "SÍ" : "NO";
+    document.getElementById('val-mensaje-clinico').innerText = data.analisis.mensaje_clinico;
+
+    const parrafoTeorico = document.getElementById('texto-explicacion-condicion');
+    if(data.analisis.clasificacion === 'ideal') {
+        parrafoTeorico.innerHTML = `Al ser $\\kappa(A) \\approx ${cond.toFixed(1)}$, el sistema es bien condicionado. La matriz posee diagonal estrictamente dominante, asegurando que los métodos estacionarios (Jacobi, Gauss-Seidel) converjan velozmente al radio espectral $\\rho(T) < 1$.`;
+    } else if(data.analisis.clasificacion === 'estres') {
+        parrafoTeorico.innerHTML = `El aumento de las demandas biológicas distorsiona la dominancia diagonal. Con $\\kappa(A) \\approx ${cond.toFixed(1)}$, los errores de redondeo se propagan moderadamente, forzando a los métodos como Jacobi a requerir más iteraciones debido a un incremento en el radio espectral de la matriz de iteración.`;
+    } else {
+        parrafoTeorico.innerHTML = `<strong>Falla de Convergencia:</strong> Con un $\\kappa(A) \\approx ${cond.toExponential(2)}$, el sistema está críticamente mal condicionado debido a la casi dependencia lineal entre las dosis de fármacos. Los métodos tradicionales divergen exponencialmente, validando que solo el <strong>GCP (Gradiente Conjugado Precondicionado)</strong> y la <strong>Factorización LU</strong> (por ser exacta) sostengan la precisión numérica en este escenario severo.`;
+    }
+
+    const divMatrizA = document.getElementById('wrapper-matriz-a');
+    const divVectorB = document.getElementById('wrapper-vector-b');
+    divMatrizA.innerHTML = '';
+    divVectorB.innerHTML = '';
+    
+    const matrizA_real = data.sistema_original.matriz_a;
+    const vectorB_real = data.sistema_original.vector_b;
+    const valoresExactos = data.solucion_principal.valores; 
+    
+    for (let i = 0; i < 5; i++) {
+        divVectorB.innerHTML += `<div class="sol-card" style="background: #edf2f7; font-weight: bold;">${vectorB_real[i].toFixed(2)}</div>`;
+        for (let j = 0; j < 5; j++) {
+            divMatrizA.innerHTML += `<div class="sol-card" style="font-size:0.85rem; padding:6px;">${matrizA_real[i][j].toFixed(2)}</div>`;
+        }
+    }
+
+    const solLista = document.getElementById('solucion-valores-lista');
+    solLista.innerHTML = '';
+    const nombresVars = ["x₁: Dosis Fármaco A", "x₂: Dosis Fármaco B", "x₃: Dosis Fármaco C", "x₄: Intensidad Terapia Digital", "x₅: Ajuste Adaptativo Computacional"];
+    valoresExactos.forEach((val, i) => {
+        solLista.innerHTML += `<div class="sol-card"><strong>${nombresVars[i]}:</strong> ${val.toFixed(4)} mg/día</div>`;
+    });
+
+    actualizarFilaTabla('row-jacobi', data.cuadro_comparativo.jacobi);
+    actualizarFilaTabla('row-gs', data.cuadro_comparativo.gauss_seidel);
+    actualizarFilaTabla('row-sor', data.cuadro_comparativo.sor);
+    actualizarFilaTabla('row-gcp', data.cuadro_comparativo.gradiente_conjugado_precond);
+
+    inyectarPasosIterativos('tbody-steps-jacobi', data.historial_pasos.jacobi);
+    inyectarPasosIterativos('tbody-steps-gs', data.historial_pasos.gauss_seidel);
+    inyectarPasosIterativos('tbody-steps-sor', data.historial_pasos.sor);
+    inyectarPasosIterativos('tbody-steps-gcp', data.historial_pasos.gradiente_conjugado_precond);
+
+    // Renderizado de matrices L y U e inyección del Vector Y
+    const divL = document.getElementById('wrapper-det-l');
+    const divU = document.getElementById('wrapper-det-u');
+    const divY = document.getElementById('wrapper-det-y');
+    divL.innerHTML = ''; divU.innerHTML = ''; divY.innerHTML = '';
+    
+    if (data.detalle_lu) {
+        for(let i = 0; i < 5; i++) {
+            divY.innerHTML += `<div class="sol-card" style="background:#e2e8f0; font-weight:bold; padding: 8px 12px; border-radius: 4px;">y<sub>${i+1}</sub>: ${data.detalle_lu.vector_y[i].toFixed(2)}</div>`;
+            for(let j = 0; j < 5; j++) {
+                divL.innerHTML += `<div class="sol-card" style="font-size:0.8rem; padding:6px; text-align:center; background:#f7fafc; border:1px solid #e2e8f0; border-radius:4px;">${data.detalle_lu.matriz_l[i][j].toFixed(2)}</div>`;
+                divU.innerHTML += `<div class="sol-card" style="font-size:0.8rem; padding:6px; text-align:center; background:#f7fafc; border:1px solid #e2e8f0; border-radius:4px;">${data.detalle_lu.matriz_u[i][j].toFixed(2)}</div>`;
+            }
+        }
+    }
+
+    // DISPARADOR DE LA FUNCIÓN DE DESGLOSE COMPLETO ADICIONAL (Fase Regresiva de las X)
+    if (typeof mostrarDemostracionCompletaLU === "function") {
+        mostrarDemostracionCompletaLU(data.detalle_lu);
+    }
+
+    graficarPlanos3D(data.visualizacion_planos_3d, valoresExactos);
+
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+        MathJax.typesetPromise();
+    }
+}
+
+function inyectarPasosIterativos(elementId, vectorPasos) {
+    const tbody = document.getElementById(elementId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    if (!vectorPasos || vectorPasos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#a0aec0; padding:12px;"><i class="fas fa-times-circle"></i> Divergencia o sin pasos registrados en este escenario.</td></tr>`;
+        return;
+    }
+
+    vectorPasos.forEach(paso => {
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${paso.k}</strong></td>
+                <td>${paso.x[0].toFixed(4)}</td>
+                <td>${paso.x[1].toFixed(4)}</td>
+                <td>${paso.x[2].toFixed(4)}</td>
+                <td>${paso.x[3].toFixed(4)}</td>
+                <td>${paso.x[4].toFixed(4)}</td>
+                <td style="color:#c53030; font-weight:500;">${paso.error.toExponential(3)}</td>
+            </tr>`;
+    });
+}
+
+function actualizarFilaTabla(filaId, infoMetodo) {
+    const fila = document.getElementById(filaId);
+    if(fila) {
+        fila.querySelector('.iter').innerText = infoMetodo.iteraciones;
+        fila.querySelector('.conv').innerText = infoMetodo.convergencia;
+    }
+}
+
+// =========================================================================
+// FUNCIÓN ADICIONAL: DESGLOSE COMPLETO DE LA SUSTITUCIÓN REGRESIVA (Ux = y)
+// =========================================================================
+function mostrarDemostracionCompletaLU(detalleLu) {
+    const contenedor = document.getElementById('bloque-demostracion-lu');
+    if (!contenedor) return;
+
+    if (!detalleLu || !detalleLu.matriz_u || !detalleLu.vector_y) {
+        contenedor.innerHTML = '';
+        return;
+    }
+
+    const U = detalleLu.matriz_u;
+    const y = detalleLu.vector_y;
+    
+    // Suponemos un sistema de 5x5, calculamos las X de forma regresiva manualmente para la demostración
+    let x = new Array(5).fill(0);
+    let htmlPasos = '';
+
+    // Nombres descriptivos para asociar en el desglose clínico
+    const nombresVars = ["x_1 (Fármaco A)", "x_2 (Fármaco B)", "x_3 (Fármaco C)", "x_4 (Terapia Digital)", "x_5 (Ajuste Adaptativo)"];
+
+    htmlPasos += `
+        <div style="margin-top: 25px; border-top: 2px dashed #cbd5e0; padding-top: 15px;">
+            <h5 style="color: #2b6cb0; margin-bottom: 12px;">
+                <i class="fas fa-history"></i> 4. Fase Regresiva: Resolución de $U\mathbf{x} = \mathbf{y}$ paso a paso
+            </h5>
+            <p style="font-size: 0.9rem; margin-bottom: 15px; color: #4a5568;">
+                A continuación se realiza la sustitución hacia atrás desde la última fila hasta la primera para hallar los valores definitivos de los componentes de dosificación $\mathbf{x}$:
+            </p>
+            <div class="pasos-regresivos-lista" style="display: flex; flex-direction: column; gap: 12px;">
+    `;
+
+    // Algoritmo de sustitución regresiva con recolección de cadenas de texto matemático
+    for (let i = 4; i >= 0; i--) {
+        let sumatorioTexto = '';
+        let sumaValores = 0;
+
+        for (let j = i + 1; j < 5; j++) {
+            let Coef = U[i][j];
+            sumaValores += Coef * x[j];
+            
+            // Construcción del texto de la ecuación
+            let signo = Coef >= 0 ? '+' : '';
+            sumatorioTexto += ` ${signo} (${Coef.toFixed(3)} \\cdot ${x[j].toFixed(4)})`;
+        }
+
+        // Calcular el valor exacto de la variable actual
+        x[i] = (y[i] - sumaValores) / U[i][i];
+
+        // Plantilla LaTeX para visualizar el despeje analítico individual
+        let ecuacionDespeje = `$$${nombresVars[i].split(' ')[0]} = \\frac{${y[i].toFixed(3)} - [${sumatorioTexto === '' ? '0' : sumatorioTexto.trim()}]}{${U[i][i].toFixed(3)}} = ${x[i].toFixed(4)}$$`;
+
+        htmlPasos += `
+            <div class="paso-card-regresivo" style="background: #f7fafc; padding: 12px; border-left: 4px solid #4299e1; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <span style="font-weight: bold; color: #2d3748; font-size: 0.85rem; text-transform: uppercase; display:block; margin-bottom:4px;">
+                    Determinación de $${nombresVars[i].split(' ')[0]}$ (${nombresVars[i].substring(4)}):
+                </span>
+                <div style="overflow-x: auto; padding: 4px 0;">
+                    ${ecuacionDespeje}
+                </div>
+            </div>
+        `;
+    }
+
+    htmlPasos += `
+            </div>
+        </div>
+    `;
+
+    contenedor.innerHTML = htmlPasos;
+}
+
+function graficarPlanos3D(subsistema, valoresSolucion) {
+    const A = subsistema.matrix_33;
+    const b = subsistema.vector_33;
+    const size = 25;
+    const xRange = Array.from({length: size}, (_, i) => i * (20 / size));
+    const yRange = Array.from({length: size}, (_, i) => i * (20 / size));
+
+    const dataPlotly = [];
+    const colores = ['Reds', 'Blues', 'Greens'];
+    const nombresPlanos = ['Plano Ec. 1 (Fármaco A)', 'Plano Ec. 2 (Fármaco B)', 'Plano Ec. 3 (Fármaco C)'];
+
+    for (let i = 0; i < 3; i++) {
+        let zMatrix = [];
+        for (let r = 0; r < size; r++) {
+            let row = [];
+            for (let c = 0; c < size; c++) {
+                let x_val = xRange[c];
+                let y_val = yRange[r];
+                let z_val = (b[i] - A[i][0] * x_val - A[i][1] * y_val) / A[i][2];
+                row.push(z_val);
+            }
+            zMatrix.push(row);
+        }
+        dataPlotly.push({
+            x: xRange, y: yRange, z: zMatrix,
+            type: 'surface', colorscale: colores[i], showscale: false,
+            name: nombresPlanos[i], opacity: 0.6
+        });
+    }
+
+    dataPlotly.push({
+        x: [valoresSolucion[0]],
+        y: [valoresSolucion[1]],
+        z: [valoresSolucion[2]],
+        type: 'scatter3d',
+        mode: 'markers',
+        marker: {
+            size: 10,
+            color: '#2b6cb0',
+            symbol: 'circle',
+            line: { color: '#ffffff', width: 2 }
+        },
+        name: 'Punto de Solución Exacta (Intersección)'
+    });
+
+    const layout = {
+        title: `Estructura Geométrica del Escenario: ${escenarioActual.toUpperCase()}`,
+        scene: {
+            xaxis: {title: 'x₁ (Fármaco A)'},
+            yaxis: {title: 'x₂ (Fármaco B)'},
+            zaxis: {title: 'x₃ (Fármaco C)'}
+        },
+        margin: {l: 0, r: 0, b: 0, t: 50}
+    };
+    Plotly.newPlot('plotly-planes-3d', dataPlotly, layout);
+}
+</script>
 </body>
 </html>
